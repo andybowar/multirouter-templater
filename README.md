@@ -1,0 +1,123 @@
+# Multi-Router Tapered Tenon Template Generator
+
+Generates 3D-printable tenon templates for a **JDS Multi-Router**, compatible
+with the factory template holder, with a PantoRouter-style taper so you can
+sneak up on a joint fit instead of printing a new template every time.
+
+## Running it
+
+```sh
+./run.sh
+```
+
+Opens <http://127.0.0.1:8765>. First time only:
+
+```sh
+python3.14 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+Needs Python 3.11–3.14.
+
+## Using it
+
+Three inputs:
+
+| Input | What it is |
+|---|---|
+| **Tenon width** | The mortise width — i.e. the bit you cut the *mortise* with |
+| **Tenon length** | The long dimension of the tenon |
+| **Router bit diameter** | The bit you'll cut the *tenon* with. Need not match the mortising bit |
+
+Tenon *depth* — how far it protrudes from the shoulder — is your plunge
+setting, not template geometry, so it isn't an input.
+
+Fields accept fractions (`1/2`, `1-1/2`) or decimals. Use *measured* bit
+diameters, not nominal.
+
+Then download **STL** or **3MF** for the slicer, **STEP** for Fusion 360, or
+**DXF** for flat outlines. The **setup sheet** is a printable text file with
+the dimensions, the adjustment table and print settings.
+
+## Adjusting the fit
+
+The guide profile is a shallow frustum — biggest where it meets the step below
+it, tapering inward toward its free top face. Where the stylus bearing sits
+along that taper decides the size of the tenon.
+
+Set the bearing depth by how far its edge sits below the template's free top
+face. Flush = 0. Deeper = bigger tenon.
+
+| Bearing depth | Tenon |
+|---|---|
+| flush | −0.010" |
+| 1/16" | −0.005" |
+| **1/8"** | **nominal** |
+| 3/16" | +0.005" |
+| 1/4" | +0.010" |
+
+**1/16" of bearing travel = 0.005" of tenon.** That's a 12.5:1 reduction, so a
+sloppy 0.010" error setting the bearing is worth 0.0008" on the tenon. Nominal
+sits in the middle of the range, so you can go either way after a test cut:
+tight, back the bearing out; loose, push it in.
+
+Cut a test tenon, try it, move the bearing, cut again.
+
+## The part
+
+Three layers. The bottom two match the factory template and are fixed; only the
+tapered guide profile is computed.
+
+| Layer | Size | Thickness |
+|---|---|---|
+| base plate | 3.500 × 1.000" | 0.250" |
+| middle step | 3.250 × 0.750" | 0.125" |
+| guide profile | computed | 0.250" |
+
+Overall 0.625", against 0.500" for the factory template — the guide profile is
+thicker to make room for the taper.
+
+The back face is engraved with the router bit size and the resulting tenon
+size, so you can identify a template on the shelf.
+
+## Printing
+
+Base plate (engraved face) flat on the bed, profile pointing up. The taper
+shrinks as it rises, so it's self-supporting — **no supports anywhere**, and
+the guide edge is built from perimeters on the printer's best axis.
+
+- 0.4 mm nozzle, 0.12 mm layers
+- 5–6 perimeters — the guide edge should be solid wall, not infill
+- 40% infill minimum; 100% if the profile is under 0.30" wide
+- PETG to start: tougher than PLA against a rolling bearing
+
+Files export in millimetres.
+
+## Before you trust it
+
+Print the default configuration (0.500" tenon, 2.000" long, 0.500" bit) and
+measure across the guide profile at its base. It should read
+**0.6350" × 2.1350"**.
+
+That number transfers 1:1 to the tenon. Closing any gap is exactly what the
+taper is for.
+
+**Nothing here has cut wood yet.** The underlying math reproduces a measured
+factory template exactly, which is a strong calibration point — but it is not
+proof.
+
+## How it works
+
+The Multi-Router linkage is 1:1, so the bit centreline path is a pure
+translation of the stylus centreline path. Working through the offsets:
+
+```
+template_dim = tenon_dim + (bit_dia − stylus_dia)
+```
+
+With the measured 0.375" stylus, a 0.500" × 2.000" tenon cut with a 0.500" bit
+needs a 0.625" × 2.125" template — which is exactly what the factory template
+measures.
+
+For the full derivation, the reasoning behind the taper direction, and the
+invariants to preserve when changing the code, see [CLAUDE.md](CLAUDE.md).

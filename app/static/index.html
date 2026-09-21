@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-Router Tenon Template Generator</title>
+<style>
+  :root {
+    --ink: #1b1d1e;
+    --muted: #6b7076;
+    --line: #d9dcdf;
+    --bg: #f6f7f8;
+    --panel: #ffffff;
+    --accent: #b4531f;
+    --accent-soft: #fdf2ea;
+    --warn: #8a6100;
+    --warn-bg: #fff8e3;
+    --err: #9c2318;
+    --err-bg: #fdeeec;
+    --ok: #1f6b45;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  .num { font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+  header {
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 18px 28px;
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+  header p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+  main {
+    max-width: 1180px; margin: 0 auto; padding: 24px 28px 64px;
+    display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 20px;
+  }
+  .panel + .panel { margin-top: 18px; }
+  h2 {
+    margin: 0 0 14px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted);
+  }
+
+  label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 5px; }
+  .field { margin-bottom: 18px; }
+  .field:last-child { margin-bottom: 0; }
+  input[type=text] {
+    width: 100%; padding: 9px 11px; font-size: 16px;
+    border: 1px solid var(--line); border-radius: 6px; background: #fff;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 5px; }
+
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .presets button {
+    padding: 4px 9px; font-size: 12px; border: 1px solid var(--line);
+    background: #fff; border-radius: 5px; cursor: pointer; color: var(--ink);
+    font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  }
+  .presets button:hover { border-color: var(--accent); color: var(--accent); }
+
+  .derived { display: grid; grid-template-columns: 1fr auto; gap: 7px 14px; font-size: 13px; }
+  .derived dt { color: var(--muted); }
+  .derived dd { margin: 0; text-align: right; font-family: "SF Mono", ui-monospace, Menlo, monospace; }
+  .derived .sep { grid-column: 1 / -1; border-top: 1px solid var(--line); margin: 4px 0; }
+  .derived .hi dd { color: var(--accent); font-weight: 600; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    text-align: right; font-weight: 600; color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em; padding: 0 10px 8px; border-bottom: 1px solid var(--line);
+  }
+  th:first-child, td:first-child { text-align: left; }
+  td { padding: 7px 10px; text-align: right; font-family: "SF Mono", ui-monospace, Menlo, monospace; border-bottom: 1px solid #eef0f1; }
+  tr.nominal { background: var(--accent-soft); }
+  tr.nominal td { font-weight: 600; color: var(--accent); }
+
+  .msg { padding: 11px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 10px; }
+  .msg.err { background: var(--err-bg); color: var(--err); border: 1px solid #f2cfcb; }
+  .msg.warn { background: var(--warn-bg); color: var(--warn); border: 1px solid #f0e0b0; }
+
+  .exports { display: flex; flex-wrap: wrap; gap: 9px; }
+  .exports button {
+    padding: 10px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; border-radius: 6px; color: var(--ink);
+  }
+  .exports button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .exports button:hover:not(:disabled) { filter: brightness(0.96); }
+  .exports button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .fmt-note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+  details.adv { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+  details.adv summary {
+    cursor: pointer; font-size: 12px; color: var(--muted); font-weight: 600;
+    letter-spacing: 0.06em; text-transform: uppercase; list-style: none;
+  }
+  details.adv summary::-webkit-details-marker { display: none; }
+  details.adv summary::before { content: "▸ "; }
+  details.adv[open] summary::before { content: "▾ "; }
+  details.adv .body { margin-top: 14px; }
+
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .check input { width: 16px; height: 16px; }
+
+  svg { display: block; width: 100%; height: auto; }
+  .svg-wrap + .svg-wrap { margin-top: 20px; }
+  .svg-cap { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .legend span { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 18px; height: 0; border-top-width: 2px; border-top-style: solid; }
+
+  pre.report {
+    background: #fbfbfc; border: 1px solid var(--line); border-radius: 6px;
+    padding: 16px; overflow-x: auto; font-size: 11.5px; line-height: 1.45;
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; margin: 0;
+  }
+  .busy { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>JDS Multi-Router &mdash; Tapered Tenon Template Generator</h1>
+  <p>Parametric Woodpeckers-compatible templates with a PantoRouter-style taper for fit adjustment.</p>
+</header>
+
+<main>
+  <!-- ---------------------------------------------------------------- -->
+  <div>
+    <div class="panel">
+      <h2>Tenon Parameters</h2>
+
+      <div class="field">
+        <label for="wid">Tenon width <span style="color:var(--muted);font-weight:400">(= mortise width)</span></label>
+        <input type="text" id="wid" value="0.500" class="num" autocomplete="off">
+        <div class="presets" id="widPresets"></div>
+        <div class="hint">Set by the bit you cut the <em>mortise</em> with. The mortise is a
+          single-pass stadium, so its end radius is half this.</div>
+      </div>
+
+      <div class="field">
+        <label for="len">Tenon length <span style="color:var(--muted);font-weight:400">(long dimension)</span></label>
+        <input type="text" id="len" value="2.000" class="num" autocomplete="off">
+        <div class="hint">Tenon <em>depth</em> &mdash; protrusion from the shoulder &mdash; is your
+          plunge setting, not template geometry.</div>
+      </div>
+
+      <div class="field">
+        <label for="bit">Router bit diameter</label>
+        <input type="text" id="bit" value="0.500" class="num" autocomplete="off">
+        <div class="presets" id="bitPresets"></div>
+        <div class="hint">Need not match the mortising bit. Use the <em>measured</em>
+          diameter, not nominal.</div>
+      </div>
+
+      <details class="adv">
+        <summary>Machine constants</summary>
+        <div class="body">
+          <div class="field">
+            <label for="stylus">Stylus bearing diameter</label>
+            <input type="text" id="stylus" value="0.375" class="num" autocomplete="off">
+            <div class="hint">Measured on the machine. Every tenon depends on this 1:1.</div>
+          </div>
+          <div class="field">
+            <label for="taper">Taper range (total, base to top)</label>
+            <input type="text" id="taper" value="0.020" class="num" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="pthk">Guide profile depth</label>
+            <input type="text" id="pthk" value="0.250" class="num" autocomplete="off">
+            <div class="hint">Deeper = shallower draft = finer control per unit of bearing travel.</div>
+          </div>
+          <div class="field">
+            <label class="check"><input type="checkbox" id="engrave" checked> Engrave setup table on back face</label>
+            <div class="hint">Off gives a much smaller file (~75&nbsp;KB vs ~7&nbsp;MB).</div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <h2>Derived Geometry</h2>
+      <dl class="derived" id="derived"></dl>
+    </div>
+  </div>
+
+  <!-- ---------------------------------------------------------------- -->
+  <div>
+    <div id="messages"></div>
+
+    <div class="panel">
+      <h2>Export</h2>
+      <div class="exports">
+        <button class="primary" data-fmt="stl">Download STL</button>
+        <button data-fmt="step">STEP</button>
+        <button data-fmt="3mf">3MF</button>
+        <button data-fmt="dxf">DXF</button>
+        <button data-fmt="report">Setup sheet</button>
+      </div>
+      <div class="fmt-note">
+        Geometry is written in millimeters. <strong>STEP</strong> is the clean import
+        path for Fusion 360; <strong>STL</strong> or <strong>3MF</strong> go straight to a slicer.
+        <span id="busy" class="busy"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Fit Adjustment</h2>
+      <p style="margin:-4px 0 14px;font-size:13px;color:var(--muted)">
+        Set the bearing depth by how far its edge sits below the template's free top face.
+        Flush&nbsp;=&nbsp;0. Deeper&nbsp;=&nbsp;bigger tenon.
+      </p>
+      <table>
+        <thead><tr>
+          <th>Bearing depth</th><th>Tenon change</th><th>Tenon W</th><th>Tenon L</th>
+        </tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <p id="ratioNote" style="margin:14px 0 0;font-size:13px;color:var(--muted)"></p>
+    </div>
+
+    <div class="panel">
+      <h2>Preview</h2>
+      <div class="svg-wrap">
+        <div class="svg-cap">Plan view &mdash; looking down the bearing axis</div>
+        <svg id="plan" viewBox="0 0 760 300"></svg>
+        <div class="legend">
+          <span><i class="swatch" style="border-top-color:#9aa1a8"></i> holder interface (fixed)</span>
+          <span><i class="swatch" style="border-top-color:#b4531f"></i> profile at base</span>
+          <span><i class="swatch" style="border-top-color:#b4531f;border-top-style:dashed"></i> profile at top</span>
+          <span><i class="swatch" style="border-top-color:#1f6b45;border-top-style:dotted"></i> resulting tenon (nominal)</span>
+        </div>
+      </div>
+      <div class="svg-wrap">
+        <div class="svg-cap">Side elevation &mdash; taper shown true scale</div>
+        <svg id="side" viewBox="0 0 760 210"></svg>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Setup Sheet</h2>
+      <pre class="report" id="report"></pre>
+    </div>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const INPUTS = ["bit", "wid", "len", "stylus", "taper", "pthk"];
+let state = null;
+
+/* Accept shop-style input: 0.5, .5, 1/2, 1-1/2 */
+function parseLen(s) {
+  s = String(s).trim().replace(/"/g, "");
+  if (!s) return NaN;
+  let m = s.match(/^(\d*\.?\d*)\s*[-\s]\s*(\d+)\s*\/\s*(\d+)$/);
+  if (m) return parseFloat(m[1] || 0) + parseInt(m[2]) / parseInt(m[3]);
+  m = s.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (m) return parseInt(m[1]) / parseInt(m[2]);
+  const v = parseFloat(s);
+  return isNaN(v) ? NaN : v;
+}
+
+const BIT_PRESETS = [
+  ["1/4", 0.25], ["5/16", 0.3125], ["3/8", 0.375],
+  ["7/16", 0.4375], ["1/2", 0.5], ["5/8", 0.625],
+];
+const fmtIn = (v) => v.toFixed(4).replace(/0+$/, "").replace(/\.$/, ".0");
+[["bitPresets", "bit"], ["widPresets", "wid"]].forEach(([host, target]) => {
+  BIT_PRESETS.forEach(([label, v]) => {
+    const b = document.createElement("button");
+    b.textContent = "⌀ " + label;
+    b.onclick = () => { $(target).value = fmtIn(v); refresh(); };
+    $(host).appendChild(b);
+  });
+});
+
+function payload() {
+  return {
+    bit_dia: parseLen($("bit").value),
+    tenon_width: parseLen($("wid").value),
+    tenon_length: parseLen($("len").value),
+    stylus_dia: parseLen($("stylus").value),
+    taper_range: parseLen($("taper").value),
+    profile_thk: parseLen($("pthk").value),
+    engrave: $("engrave").checked,
+  };
+}
+
+const f4 = (v) => (v >= 0 ? "" : "-") + Math.abs(v).toFixed(4) + '"';
+const ratio = (v) => v.toFixed(1).replace(/\.0$/, "");
+const sgn = (v) => (v > 0 ? "+" : v < 0 ? "−" : "±") + Math.abs(v).toFixed(4) + '"';
+
+async function refresh() {
+  const p = payload();
+  if (Object.values(p).some((v) => typeof v === "number" && isNaN(v))) {
+    $("messages").innerHTML = '<div class="msg err">Could not read one of the inputs. Use a decimal (0.500) or a fraction (1/2).</div>';
+    return;
+  }
+  const res = await fetch("/api/compute", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p),
+  });
+  state = await res.json();
+  render();
+}
+
+function render() {
+  const { ok, errors, warnings, dims: d, table, report } = state;
+
+  $("messages").innerHTML =
+    errors.map((e) => `<div class="msg err"><strong>Cannot build:</strong> ${e}</div>`).join("") +
+    warnings.map((w) => `<div class="msg warn">${w}</div>`).join("");
+
+  document.querySelectorAll(".exports button").forEach((b) => (b.disabled = !ok));
+
+  $("derived").innerHTML = `
+    <dt>Tenon width</dt><dd>${f4(d.tenon_width)}</dd>
+    <dt>Tenon length</dt><dd>${f4(d.tenon_length)}</dd>
+    <dt>Tenon end radius</dt><dd>${f4(d.tenon_width / 2)}</dd>
+    <div class="sep"></div>
+    <dt>Router bit</dt><dd>${f4(d.bit_dia)}</dd>
+    <dt>Template offset</dt><dd>${sgn(d.offset)}</dd>
+    <div class="sep"></div>
+    <dt>Profile at base</dt><dd>${f4(d.prof_wid_base)} &times; ${f4(d.prof_len_base)}</dd>
+    <div class="hi"><dt>Profile at nominal</dt></div><dd class="hi" style="color:var(--accent);font-weight:600">${f4(d.prof_wid_nom)} &times; ${f4(d.prof_len_nom)}</dd>
+    <dt>Profile at top</dt><dd>${f4(d.prof_wid_top)} &times; ${f4(d.prof_len_top)}</dd>
+    <dt>End radius (nominal)</dt><dd>${f4(d.prof_end_radius_nom)}</dd>
+    <div class="sep"></div>
+    <dt>Draft angle</dt><dd>${d.draft_deg.toFixed(2)}&deg;</dd>
+    <dt>Reduction ratio</dt><dd>${ratio(d.reduction_ratio)}:1</dd>
+    <dt>Overall thickness</dt><dd>${f4(d.total_thk)}</dd>
+  `;
+
+  $("tableBody").innerHTML = table.map((r) => `
+    <tr class="${r.is_nominal ? "nominal" : ""}">
+      <td>${r.depth_label}</td>
+      <td>${r.is_nominal ? "nominal" : sgn(r.delta)}</td>
+      <td>${r.tenon_width.toFixed(4)}</td>
+      <td>${r.tenon_length.toFixed(4)}</td>
+    </tr>`).join("");
+
+  $("ratioNote").innerHTML =
+    `<strong>${f4(d.travel_per_5thou)}</strong> of bearing travel changes the tenon by 0.005&Prime;. ` +
+    `At ${ratio(d.reduction_ratio)}:1, a sloppy 0.010&Prime; error in setting the bearing is worth only ` +
+    `${(0.01 / d.reduction_ratio).toFixed(4)}&Prime; on the tenon.`;
+
+  $("report").textContent = report || "";
+  drawPlan(d);
+  drawSide(d);
+}
+
+/* --- SVG helpers ------------------------------------------------------ */
+
+function stadium(cx, cy, L, W, s) {
+  const l = L * s, w = W * s, r = w / 2, a = (l - w) / 2;
+  if (a <= 0.0001) return `M ${cx - r} ${cy} A ${r} ${r} 0 1 1 ${cx + r} ${cy} A ${r} ${r} 0 1 1 ${cx - r} ${cy} Z`;
+  return `M ${cx - a} ${cy - r} L ${cx + a} ${cy - r} A ${r} ${r} 0 0 1 ${cx + a} ${cy + r} ` +
+         `L ${cx - a} ${cy + r} A ${r} ${r} 0 0 1 ${cx - a} ${cy - r} Z`;
+}
+function rect(cx, cy, L, W, s) {
+  return `M ${cx - L * s / 2} ${cy - W * s / 2} h ${L * s} v ${W * s} h ${-L * s} Z`;
+}
+const path = (d, stroke, dash, width) =>
+  `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${width || 1.5}"${dash ? ` stroke-dasharray="${dash}"` : ""}/>`;
+
+/* --- dimension annotations -------------------------------------------- */
+
+const DIM = "#8a9096", MONO = "ui-monospace,Menlo,Consolas,monospace";
+const dimTxt = (v) => v.toFixed(3);
+
+/* Arrowhead with its tip at (x,y), body running along (dx,dy). */
+function arrow(x, y, dx, dy, c) {
+  const L = 7, W = 2.5, px = -dy, py = dx;
+  return `<polygon points="${x},${y} ${x + dx * L + px * W},${y + dy * L + py * W} ` +
+         `${x + dx * L - px * W},${y + dy * L - py * W}" fill="${c}"/>`;
+}
+const ln = (x1, y1, x2, y2, c, w) =>
+  `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${c}" stroke-width="${w}"/>`;
+
+/* Horizontal dimension at height y, witness lines reaching back to yFrom. */
+function dimH(x1, x2, y, yFrom, label, c) {
+  c = c || DIM;
+  const dir = y > yFrom ? 1 : -1, tight = Math.abs(x2 - x1) < 34;
+  const g = [
+    ln(x1, yFrom + dir * 3, x1, y + dir * 5, c, 0.7),
+    ln(x2, yFrom + dir * 3, x2, y + dir * 5, c, 0.7),
+    ln(tight ? x1 - 14 : x1, y, tight ? x2 + 14 : x2, y, c, 0.9),
+  ];
+  const o = tight ? -1 : 1;
+  g.push(arrow(x1, y, o, 0, c), arrow(x2, y, -o, 0, c));
+  g.push(`<text x="${(x1 + x2) / 2}" y="${y - 6}" text-anchor="middle" font-size="11.5" ` +
+         `fill="${c}" font-family="${MONO}">${label}</text>`);
+  return g.join("");
+}
+
+/* Vertical dimension at x, witness lines reaching back to xFrom. */
+function dimV(y1, y2, x, xFrom, label, c) {
+  c = c || DIM;
+  const dir = x > xFrom ? 1 : -1, tight = Math.abs(y2 - y1) < 34;
+  const g = [
+    ln(xFrom + dir * 3, y1, x + dir * 5, y1, c, 0.7),
+    ln(xFrom + dir * 3, y2, x + dir * 5, y2, c, 0.7),
+    ln(x, tight ? y1 - 14 : y1, x, tight ? y2 + 14 : y2, c, 0.9),
+  ];
+  const o = tight ? -1 : 1;
+  g.push(arrow(x, y1, 0, o, c), arrow(x, y2, 0, -o, c));
+  const tx = x + dir * 13, ty = (y1 + y2) / 2;
+  g.push(`<text x="${tx}" y="${ty}" text-anchor="middle" font-size="11.5" fill="${c}" ` +
+         `font-family="${MONO}" transform="rotate(-90 ${tx} ${ty})">${label}</text>`);
+  return g.join("");
+}
+
+/* --- plan view --------------------------------------------------------- */
+
+const ACC = "#b4531f", GRN = "#1f6b45";
+
+function drawPlan(d) {
+  const VW = 760, VH = 300;
+  const ML = 60, MR = 178, MT = 98, MB = 28;
+  const s = Math.min((VW - ML - MR) / d.base_len, (VH - MT - MB) / d.base_wid);
+  const cx = ML + (VW - ML - MR) / 2, cy = MT + (VH - MT - MB) / 2;
+  const R = cx + (d.base_len * s) / 2;
+  const T = cy - (d.base_wid * s) / 2;
+  const hx = (w) => (w * s) / 2;
+
+  const g = [
+    path(rect(cx, cy, d.base_len, d.base_wid, s), "#9aa1a8", "", 1.5),
+    path(stadium(cx, cy, d.mid_len, d.mid_wid, s), "#9aa1a8", "", 1.5),
+    path(stadium(cx, cy, d.prof_len_base, d.prof_wid_base, s), ACC, "", 2),
+    path(stadium(cx, cy, d.prof_len_top, d.prof_wid_top, s), ACC, "5 4", 1.5),
+    path(stadium(cx, cy, d.tenon_length, d.tenon_width, s), GRN, "2 3", 1.5),
+  ];
+
+  // Base, top and tenon land within ~0.020" of each other, so the three
+  // dimension lines look nearly identical - the labels carry the meaning.
+  // Smallest sits closest to the part, which also keeps the ordering correct
+  // when a sub-stylus bit makes the template smaller than the tenon.
+  const stack = (vals, place) =>
+    vals.slice().sort((a, b) => a.v - b.v).forEach((o, i) => place(o, i));
+
+  stack(
+    [
+      { v: d.tenon_length, t: "tenon", c: GRN },
+      { v: d.prof_len_top, t: "top", c: ACC },
+      { v: d.prof_len_base, t: "base", c: ACC },
+    ],
+    (o, i) => g.push(dimH(cx - hx(o.v), cx + hx(o.v), T - 24 - i * 26, T,
+                          `${o.t} ${dimTxt(o.v)}`, o.c)),
+  );
+
+  stack(
+    [
+      { v: d.tenon_width, t: "tenon", c: GRN },
+      { v: d.prof_wid_top, t: "top", c: ACC },
+      { v: d.prof_wid_base, t: "base", c: ACC },
+    ],
+    (o, i) => g.push(dimV(cy - hx(o.v), cy + hx(o.v), R + 34 + i * 36, R,
+                          `${o.t} ${dimTxt(o.v)}`, o.c)),
+  );
+
+  $("plan").innerHTML = g.join("");
+}
+
+/* --- side elevation ---------------------------------------------------- */
+
+function drawSide(d) {
+  const VW = 760, VH = 210;
+  const ML = 62, MR = 118, MT = 34, MB = 48;
+  const s = Math.min((VW - ML - MR) / d.base_len, (VH - MT - MB) / d.total_thk);
+  const cx = ML + (VW - ML - MR) / 2;
+  const base = VH - MB;
+  const y = (h) => base - h * s;
+  const half = (w) => (w * s) / 2;
+  const z0 = d.base_thk + d.mid_thk;
+
+  const face = (w, h1, h2) =>
+    `<path d="M ${cx - half(w)} ${y(h1)} L ${cx + half(w)} ${y(h1)} ` +
+    `L ${cx + half(w)} ${y(h2)} L ${cx - half(w)} ${y(h2)} Z" fill="#fff" ` +
+    `stroke="#9aa1a8" stroke-width="1.5"/>`;
+
+  const g = [
+    face(d.base_len, 0, d.base_thk),
+    face(d.mid_len, d.base_thk, z0),
+    `<path d="M ${cx - half(d.prof_len_base)} ${y(z0)} L ${cx + half(d.prof_len_base)} ${y(z0)} ` +
+    `L ${cx + half(d.prof_len_top)} ${y(z0 + d.profile_thk)} ` +
+    `L ${cx - half(d.prof_len_top)} ${y(z0 + d.profile_thk)} Z" ` +
+    `fill="#fdf2ea" stroke="#b4531f" stroke-width="2"/>`,
+  ];
+
+  // Only the tapered profile is dimensioned here; the holder interface is
+  // fixed and documented on the setup sheet.
+  g.push(dimV(y(z0 + d.profile_thk), y(z0), cx + half(d.base_len) + 34,
+              cx + half(d.base_len), dimTxt(d.profile_thk), ACC));
+
+  g.push(`<text x="${cx + half(d.prof_len_base) + 10}" y="${y(z0 + d.profile_thk) + 2}" ` +
+         `font-size="11.5" fill="${ACC}" font-family="${MONO}">${d.draft_deg.toFixed(2)}&#176;</text>`);
+  g.push(`<text x="${cx - half(d.base_len)}" y="${y(0) + 20}" font-size="11" fill="${DIM}" ` +
+         `font-family="${MONO}">engraved face / print bed</text>`);
+
+  $("side").innerHTML = g.join("");
+}
+
+/* --- Export ----------------------------------------------------------- */
+
+document.querySelectorAll(".exports button").forEach((btn) => {
+  btn.onclick = async () => {
+    const fmt = btn.dataset.fmt;
+    const url = fmt === "report" ? "/api/report" : `/api/export/${fmt}`;
+    $("busy").textContent = "Generating…";
+    btn.disabled = true;
+    try {
+      const res = await fetch(url, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()),
+      });
+      if (!res.ok) throw new Error((await res.text()).slice(0, 300));
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const m = cd.match(/filename="?([^";]+)"?/);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = m ? m[1] : `template.${fmt}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      $("busy").textContent = "Saved " + a.download;
+    } catch (e) {
+      $("busy").textContent = "Failed: " + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  };
+});
+
+let timer;
+INPUTS.forEach((id) => $(id).addEventListener("input", () => {
+  clearTimeout(timer);
+  timer = setTimeout(refresh, 220);
+}));
+$("engrave").addEventListener("change", refresh);
+refresh();
+</script>
+</body>
+</html>
