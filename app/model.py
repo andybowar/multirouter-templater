@@ -5,6 +5,7 @@ correct units into Fusion 360 and STL/3MF land correctly in a slicer.
 """
 
 from __future__ import annotations
+from fractions import Fraction
 
 from pathlib import Path
 
@@ -89,8 +90,8 @@ def build_part(spec: Spec, engrave: bool = True):
 def engraving_lines(spec: Spec) -> list[str]:
     """Just the two facts you need to pick the right template off the shelf."""
     return [
-        f"BIT {spec.bit_dia:.3f}",
-        f"TENON {spec.tenon_width:.3f} x {spec.tenon_length:.3f}",
+        f"ROUTER BIT {spec.bit_dia:.3f}",
+        f"TENON SIZE {spec.tenon_width:.3f} x {spec.tenon_length:.3f}",
     ]
 
 

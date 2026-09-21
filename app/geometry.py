@@ -180,28 +180,12 @@ class Spec:
         if not self.ok:
             return
 
-        if self.prof_wid_base > C.BASE_WID:
+        if self.prof_wid_base > C.MID_LEN or self.prof_wid_base > C.MID_WID:
             self._err(
                 f'Guide profile would be {self.prof_wid_base:.3f}" wide, which '
-                f'overhangs the {C.BASE_WID:.3f}" base plate. With a '
+                f'overhangs the {C.MID_WID:.3f}" middle layer. With a '
                 f'{self.tenon_width:.3f}" tenon the bit must stay under '
-                f"{C.BASE_WID - self.tenon_width + self.stylus_dia - self.taper_range / 2:.4f}\"."
-            )
-        elif self.prof_wid_base > C.MID_WID:
-            self._warn(
-                f"Guide profile is wider than the middle step and overhangs it "
-                f'by {(self.prof_wid_base - C.MID_WID) / 2:.3f}" per side. '
-                f"Prints as a short bridge, no supports needed. Bonus: the "
-                f"bearing cannot over-insert past the base."
-            )
-        else:
-            ledge = (C.MID_WID - self.prof_wid_base) / 2
-            self._warn(
-                f"The middle step stands {ledge:.3f}\" proud of the guide "
-                f"profile per side. If the bearing is set deeper than the "
-                f"profile base it will contact LAYER 2 instead and cut an "
-                f'oversize tenon by about {(C.MID_WID - self.prof_wid_base):.3f}". '
-                f'Do not insert the bearing past {self.profile_thk:.3f}".'
+                f"{C.MID_WID - self.tenon_width + self.stylus_dia - self.taper_range / 2:.4f}\"."
             )
 
     @property

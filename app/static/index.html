@@ -270,7 +270,7 @@ function parseLen(s) {
 
 const BIT_PRESETS = [
   ["1/4", 0.25], ["5/16", 0.3125], ["3/8", 0.375],
-  ["7/16", 0.4375], ["1/2", 0.5], ["5/8", 0.625],
+  ["7/16", 0.4375], ["1/2", 0.5],
 ];
 const fmtIn = (v) => v.toFixed(4).replace(/0+$/, "").replace(/\.$/, ".0");
 [["bitPresets", "bit"], ["widPresets", "wid"]].forEach(([host, target]) => {
