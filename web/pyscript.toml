@@ -1,0 +1,20 @@
+# What Pyodide needs on disk before bridge.py runs.
+#
+# tools/build_site.py copies the `app` package in beside index.html, so these
+# are same-origin fetches of the very same modules a workstation imports.
+# Keys are source URLs relative to the page; values are paths in Pyodide's
+# in-memory filesystem, whose root is on sys.path.
+#
+# The CAD kernel is deliberately NOT here: build123d and its ~23 MB
+# WebAssembly OpenCascade build are installed later, in the background, so the
+# numbers on the page appear in a second instead of a minute. See bridge.py.
+
+packages = ["micropip"]
+
+[files]
+"./app/__init__.py" = "./app/__init__.py"
+"./app/config.py" = "./app/config.py"
+"./app/geometry.py" = "./app/geometry.py"
+"./app/report.py" = "./app/report.py"
+"./app/model.py" = "./app/model.py"
+"./vendor/ocp_wasm_bootstrap.py" = "./ocp_wasm_bootstrap.py"

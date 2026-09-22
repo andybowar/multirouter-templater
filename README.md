@@ -4,13 +4,29 @@ Generates 3D-printable tenon templates for a **JDS Multi-Router**, compatible
 with the factory template holder, with a PantoRouter-style taper so you can
 sneak up on a joint fit instead of printing a new template every time.
 
+It is a static web page. Open it, type a tenon, download a file — there is no
+server, no account, and nothing you type leaves the tab. The geometry, the CAD
+kernel and the exporters are Python compiled to WebAssembly, running in the
+browser via [PyScript](https://pyscript.net).
+
 ## Running it
 
 ```sh
 ./run.sh
 ```
 
-Opens <http://127.0.0.1:8765>. First time only:
+Builds the site into `_site/` and opens <http://127.0.0.1:8765>. Nothing to
+install — the standard library is enough, because the page fetches its own
+Python. It does have to be served over http; opening `index.html` off the disk
+will not work.
+
+The first page load pulls down about 23 MB of OpenCascade and takes a minute or
+two. The browser caches it, so later visits are quick. The numbers, the preview
+and the setup sheet appear immediately; only the solid formats wait for the CAD
+kernel.
+
+To run the CAD code on a workstation instead — scripting exports, poking at a
+solid:
 
 ```sh
 python3.14 -m venv .venv
@@ -18,6 +34,16 @@ python3.14 -m venv .venv
 ```
 
 Needs Python 3.11–3.14.
+
+## Deploying it
+
+Push to `main`. `.github/workflows/pages.yml` checks the geometry, assembles
+the site and publishes it to GitHub Pages. Enable it once under
+**Settings → Pages → Source → GitHub Actions**.
+
+The site is `web/` with the `app` package copied in beside it — the browser
+imports the same modules a workstation does, so there is no second
+implementation to keep in step.
 
 ## Using it
 
@@ -121,3 +147,11 @@ measures.
 
 For the full derivation, the reasoning behind the taper direction, and the
 invariants to preserve when changing the code, see [CLAUDE.md](CLAUDE.md).
+
+## Layout
+
+```
+app/          the geometry, the solid and the setup sheet. Runs both places.
+web/          the page, its Python bridge, the bundled font, the OCP.wasm pin.
+tools/        assemble the site, check the geometry, check the browser runtime.
+```

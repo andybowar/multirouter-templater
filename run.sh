@@ -1,11 +1,10 @@
 #!/bin/sh
-# Start the template generator and open it in a browser.
+# Build the static site and serve it locally, exactly as GitHub Pages will.
+#
+# There is no application server any more: the page carries its own Python.
+# It does need to be served over http, though - `file://` blocks the module
+# and wheel fetches PyScript relies on.
 cd "$(dirname "$0")" || exit 1
-
-if [ ! -d .venv ]; then
-  echo "No .venv found. Run: python3.14 -m venv .venv && .venv/bin/pip install -r requirements.txt"
-  exit 1
-fi
 
 PORT="${PORT:-8765}"
 
@@ -16,4 +15,4 @@ if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
 fi
 
 ( sleep 1.5; open "http://127.0.0.1:$PORT" 2>/dev/null ) &
-exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "$PORT"
+exec python3 tools/build_site.py _site --serve --port "$PORT"

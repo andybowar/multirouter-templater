@@ -5,13 +5,12 @@ correct units into Fusion 360 and STL/3MF land correctly in a slicer.
 """
 
 from __future__ import annotations
-from fractions import Fraction
 
+import tempfile
 from pathlib import Path
 
 from build123d import (
     Align,
-    Axis,
     ExportDXF,
     Mesher,
     Plane,
@@ -35,6 +34,11 @@ from .geometry import Spec
 MM = C.IN_TO_MM
 
 FONT_CANDIDATES = ["Arial", "Helvetica", "DejaVu Sans", "Verdana"]
+
+# Font files to try before the fonts installed on the machine, best first. The
+# browser build has no system fonts at all, so it appends a bundled TTF here
+# before asking for an engraving. Empty everywhere else.
+FONT_PATHS: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -102,11 +106,10 @@ def _text_sketch(spec: Spec) -> Sketch | None:
     line_pitch = font_size * 1.55
     top = (len(lines) - 1) / 2.0 * line_pitch
 
-    for font in [*FONT_CANDIDATES, None]:
+    for kwargs in _font_kwargs():
         try:
             block = None
             for i, line in enumerate(lines):
-                kwargs = {"font": font} if font else {}
                 glyphs = Text(
                     line,
                     font_size=font_size,
@@ -120,6 +123,15 @@ def _text_sketch(spec: Spec) -> Sketch | None:
         except Exception:
             continue
     return None
+
+
+def _font_kwargs() -> list[dict]:
+    """Ways to ask build123d for a font, best first, then let it default."""
+    return [
+        *({"font_path": p} for p in FONT_PATHS),
+        *({"font": f} for f in FONT_CANDIDATES),
+        {},
+    ]
 
 
 def _engraving_solid(spec: Spec):
@@ -190,6 +202,23 @@ def export(spec: Spec, fmt: str, path: Path, engrave: bool = True) -> Path:
         mesher.write(str(path))
 
     return path
+
+
+def export_bytes(spec: Spec, fmt: str, engrave: bool = True) -> bytes:
+    """`export` straight to memory, for callers with nowhere to put a file.
+
+    The browser has no user-visible filesystem, so the page writes into
+    Pyodide's in-memory one and hands the bytes to a download.
+    """
+    fmt = fmt.lower()
+    if fmt not in FORMATS:
+        raise ValueError(f"unsupported format: {fmt}")
+
+    _, ext = FORMATS[fmt]
+    with tempfile.TemporaryDirectory(prefix="mrtt_") as tmp:
+        out = Path(tmp) / f"part{ext}"
+        export(spec, fmt, out, engrave=engrave)
+        return out.read_bytes()
 
 
 def _export_dxf(spec: Spec, path: Path) -> None:

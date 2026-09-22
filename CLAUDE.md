@@ -6,10 +6,16 @@ them look wrong until you know why.
 
 ## What this is
 
-A local web app that generates 3D-printable tenon templates for a **JDS
-Multi-Router**. The user enters a desired tenon; the app computes the template
-profile that will cause the machine's stylus to produce it, adds a
-PantoRouter-style taper for fit adjustment, and exports STL/STEP/3MF/DXF.
+A **static web page**, deployed to GitHub Pages, that generates 3D-printable
+tenon templates for a **JDS Multi-Router**. The user enters a desired tenon;
+the app computes the template profile that will cause the machine's stylus to
+produce it, adds a PantoRouter-style taper for fit adjustment, and exports
+STL/STEP/3MF/DXF.
+
+There is no server. The whole thing — geometry, OpenCascade, the exporters —
+runs in the browser under PyScript/Pyodide. `app/` is the same package in both
+places: it is copied into the site at build time, never forked. **Do not add a
+second implementation of any of the math in JavaScript.**
 
 The hard part is not the CAD. It is the transformation
 `desired tenon -> required template`. Get that wrong and the app confidently
@@ -119,9 +125,10 @@ is the only conversion point — keep it that way.
 ## Traps that have already bitten
 
 - **`Path.read_text()` needs `encoding="utf-8"`.** The default is the locale
-  encoding, which is ASCII in some environments, and `index.html` contains
-  UTF-8 characters. This crashed page loads until fixed. Reproduce with
-  `LC_ALL=C LANG=C ./run.sh`.
+  encoding, which is ASCII in some environments, and the UI contains UTF-8
+  characters. This crashed page loads back when a server read `index.html`.
+  The static build copies bytes and no longer decodes anything, but the rule
+  still applies to any Python that reads project text.
 - **`&times;` is invalid in standalone SVG.** It works in-browser (SVG inside
   HTML is parsed with HTML rules) but breaks strict XML parsers. Use numeric
   entities (`&#215;`, `&#176;`) in anything emitted into an SVG string.
@@ -129,8 +136,21 @@ is the only conversion point — keep it that way.
   looking along +Z, and in that view global +X points *left*. `model.py`
   mirrors the text block about `Plane.YZ`. Verify visually after any change —
   backwards text is easy to ship and embarrassing.
-- **The server has no autoreload.** `run.sh` runs plain uvicorn. Restart after
-  editing Python; the browser will otherwise show stale behaviour.
+- **The site is a copy, so edits need a rebuild.** `run.sh` assembles `_site/`
+  and serves that. Editing `app/` or `web/` does nothing until you restart it.
+  Hard-reload the page too — Pyodide caches aggressively.
+- **The browser has no fonts.** OpenCascade in WebAssembly cannot find a
+  system font and cannot ask fontconfig for one, so an engraving raised by
+  name silently produces nothing. `model.FONT_PATHS` exists for this: the page
+  appends the bundled `DejaVuSans.ttf` and build123d is given `font_path`.
+  Keep `FONT_PATHS` ahead of `FONT_CANDIDATES`.
+- **The CAD kernel runs on the page's main thread**, so an export freezes the
+  tab while it works. The UI paints its "Generating…" label and yields a frame
+  before calling in. Do not remove that yield.
+- **Pin OCP.wasm.** `web/vendor/ocp_wasm_bootstrap.py` carries a pinned
+  `OCP_WASM_VERSION`. It is third-party, it installs a patched `cadquery-ocp`
+  from a GitHub release, and floating it would let a stranger's build change
+  the geometry under you.
 - **Sectioning exactly at a layer interface** picks up the wrong layer. Offset
   by a small epsilon when verifying cross-sections.
 
@@ -171,14 +191,29 @@ print(s.prof_wid_nom, s.prof_len_nom)"
 ```
 
 ```sh
-# 4. Frontend logic without a browser: extract the inline <script>, stub
+# 4. Everything in 1, plus the input bounds, in one go:
+python3 tools/check_geometry.py
+```
+
+```sh
+# 5. The browser runtime, which is where the interesting failures live - a
+#    wheel that will not resolve, an OpenCascade call missing from the WASM
+#    build, an engraving with no font. Drives the real Pyodide:
+npm install --prefix tools pyodide@314.0.3
+node tools/check_browser.mjs
+```
+
+```sh
+# 6. Frontend logic without a browser: extract the inline <script>, stub
 #    document/fetch, and drive refresh() under node. Check for NaN/undefined in
 #    the generated SVG. `node --check` catches syntax errors.
 ```
 
 Previews can be rasterised for visual inspection with
-`qlmanage -t -s 1500 -o <dir> file.svg` on macOS. A headless Firefox screenshot
-of the live page does **not** work in this sandbox.
+`qlmanage -t -s 1500 -o <dir> file.svg` on macOS. Headless Chrome via puppeteer
+*does* drive the live page successfully, if you raise `protocolTimeout` — the
+WASM work blocks the main thread for minutes and the default 180 s kills the
+session mid-load.
 
 ## Layout
 
@@ -187,9 +222,21 @@ app/config.py     measured constants + design decisions. Single source of truth.
 app/geometry.py   Spec: transfer function, taper math, validation. Pure, no CAD.
 app/model.py      build123d solid, engraving, STL/STEP/3MF/DXF export.
 app/report.py     the printable setup sheet.
-app/main.py       FastAPI routes (compute / export / report).
-app/static/       single-page UI, no external dependencies, no CDN.
+
+web/index.html    the UI: inputs, SVG previews, tables. Plain JS, no framework.
+web/bridge.py     what the page calls into. Exposes compute/export on window,
+                  and brings the CAD kernel up in the background.
+web/pyscript.toml which files land in Pyodide's filesystem.
+web/vendor/       pinned OCP.wasm bootstrap (third party).
+web/fonts/        DejaVu Sans, for engraving in a browser with no fonts.
+
+tools/build_site.py     web/ + app/ -> _site/. Also serves it (--serve).
+tools/check_geometry.py the factory calibration point, as a script.
+tools/check_browser.mjs the same exports, under real Pyodide.
 ```
+
+The browser imports `app` unchanged. `web/` may import from `app`; `app` must
+never import from `web`, and must never assume a browser.
 
 `geometry.py` has no build123d import and should stay that way — it makes the
 math testable without the CAD kernel.

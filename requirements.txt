@@ -1,3 +1,5 @@
+# Only needed to run the CAD code on a workstation - scripting exports,
+# checking a solid, rendering previews. The deployed site installs its own
+# build123d in the browser (see web/bridge.py); serving the site locally needs
+# nothing but the standard library.
 build123d==0.12.0
-fastapi==0.141.1
-uvicorn[standard]==0.53.0

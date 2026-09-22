@@ -11,6 +11,13 @@ __pycache__/
 *.3mf
 *.dxf
 
+# Built site (tools/build_site.py assembles it from web/ + app/)
+_site/
+
+# Verification tooling
+node_modules/
+package-lock.json
+
 # Local tooling / editor state
 .claude/settings.local.json
 .vscode/

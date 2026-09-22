@@ -258,6 +258,45 @@ class Spec:
         }
 
 
+# Sanity limits on the raw form input, before any geometry runs. These are
+# not shop advice - they only keep a typo or a hostile URL from reaching the
+# CAD kernel. `Spec._validate` is where the real judgement lives.
+INPUT_BOUNDS: dict[str, tuple[float, float]] = {
+    "bit_dia": (0.0, 2.0),
+    "tenon_width": (0.0, 10.0),
+    "tenon_length": (0.0, 10.0),
+    "stylus_dia": (0.0, 2.0),
+    "taper_range": (0.0, 0.25),
+    "profile_thk": (0.0, 2.0),
+}
+
+
+def spec_from_inputs(values: dict) -> Spec:
+    """Build a Spec from untrusted input, raising ValueError on nonsense."""
+    kwargs: dict[str, float] = {}
+    for name, (low, high) in INPUT_BOUNDS.items():
+        if name not in values or values[name] is None:
+            continue
+        try:
+            v = float(values[name])
+        except (TypeError, ValueError):
+            raise ValueError(f"{name} is not a number") from None
+        if not v == v or v in (float("inf"), float("-inf")):
+            raise ValueError(f"{name} is not a number")
+        if not low < v <= high:
+            raise ValueError(
+                f'{name} must be greater than {low:g}" and at most {high:g}", '
+                f'got {v:g}"'
+            )
+        kwargs[name] = v
+
+    missing = [n for n in ("bit_dia", "tenon_width", "tenon_length") if n not in kwargs]
+    if missing:
+        raise ValueError(f"missing input: {', '.join(missing)}")
+
+    return Spec(**kwargs)
+
+
 _SIXTEENTHS = {
     0: "0",
     1: "1/16",

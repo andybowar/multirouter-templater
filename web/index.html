@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Multi-Router Tenon Template Generator</title>
+<link rel="stylesheet" href="https://pyscript.net/releases/2026.7.3/core.css">
+<script type="module" src="https://pyscript.net/releases/2026.7.3/core.js"></script>
 <style>
   :root {
     --ink: #1b1d1e;
@@ -36,6 +38,22 @@
     display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start;
   }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  #boot {
+    padding: 9px 28px; font-size: 13px; background: var(--accent-soft);
+    color: var(--accent); border-bottom: 1px solid #f0d9c6;
+    display: flex; align-items: center; gap: 9px;
+  }
+  #boot[hidden] { display: none; }
+  #boot.warn { background: var(--warn-bg); color: var(--warn); border-bottom-color: #f0e0b0; }
+  #boot.err { background: var(--err-bg); color: var(--err); border-bottom-color: #f2cfcb; }
+  #boot .spinner {
+    width: 11px; height: 11px; border-radius: 50%; flex: none;
+    border: 2px solid currentColor; border-right-color: transparent;
+    animation: spin 0.8s linear infinite;
+  }
+  #boot.err .spinner, #boot.warn .spinner { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .panel {
     background: var(--panel); border: 1px solid var(--line);
@@ -122,6 +140,10 @@
     font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace; margin: 0;
   }
   .busy { color: var(--muted); font-size: 13px; }
+  footer {
+    max-width: 1180px; margin: 0 auto; padding: 0 28px 48px;
+    font-size: 12px; color: var(--muted);
+  }
 </style>
 </head>
 <body>
@@ -130,6 +152,8 @@
   <h1>JDS Multi-Router &mdash; Tapered Tenon Template Generator</h1>
   <p>Parametric Woodpeckers-compatible templates with a PantoRouter-style taper for fit adjustment.</p>
 </header>
+
+<div id="boot" role="status"><span class="spinner"></span><span id="bootText">Starting Python&hellip;</span></div>
 
 <main>
   <!-- ---------------------------------------------------------------- -->
@@ -179,7 +203,8 @@
           </div>
           <div class="field">
             <label class="check"><input type="checkbox" id="engrave" checked> Engrave setup table on back face</label>
-            <div class="hint">Off gives a much smaller file (~75&nbsp;KB vs ~7&nbsp;MB).</div>
+            <div class="hint">Off gives a much smaller file (~75&nbsp;KB vs ~7&nbsp;MB) and exports
+              in a fraction of the time.</div>
           </div>
         </div>
       </details>
@@ -198,11 +223,11 @@
     <div class="panel">
       <h2>Export</h2>
       <div class="exports">
-        <button class="primary" data-fmt="stl">Download STL</button>
-        <button data-fmt="step">STEP</button>
-        <button data-fmt="3mf">3MF</button>
-        <button data-fmt="dxf">DXF</button>
-        <button data-fmt="report">Setup sheet</button>
+        <button class="primary" data-fmt="stl" disabled>Download STL</button>
+        <button data-fmt="step" disabled>STEP</button>
+        <button data-fmt="3mf" disabled>3MF</button>
+        <button data-fmt="dxf" disabled>DXF</button>
+        <button data-fmt="report" disabled>Setup sheet</button>
       </div>
       <div class="fmt-note">
         Geometry is written in millimeters. <strong>STEP</strong> is the clean import
@@ -251,10 +276,49 @@
   </div>
 </main>
 
+<footer>
+  Everything runs in this tab &mdash; the geometry, the CAD kernel and the exporters are
+  Python compiled to WebAssembly. Nothing you type is uploaded anywhere. The first visit
+  downloads about 23&nbsp;MB of OpenCascade; after that the browser has it cached.
+</footer>
+
 <script>
 const $ = (id) => document.getElementById(id);
 const INPUTS = ["bit", "wid", "len", "stylus", "taper", "pthk"];
 let state = null;
+
+/* The two halves of the app arrive at very different times: the arithmetic as
+   soon as Python boots, the CAD kernel after a ~23 MB download. bridge.py
+   calls in here as each one lands. */
+let coreReady = false, cadReady = false;
+
+function boot(text, kind) {
+  const el = $("boot");
+  if (text === null) { el.hidden = true; return; }
+  el.hidden = false;
+  el.className = kind || "";
+  $("bootText").innerHTML = text;
+}
+
+window.MRTT = {
+  status: (text) => boot(text),
+  warn: (text) => boot(text, "warn"),
+  coreReady: () => {
+    coreReady = true;
+    refresh();
+  },
+  cadReady: () => {
+    cadReady = true;
+    boot(null);
+    syncButtons();
+  },
+  cadFailed: (msg) => {
+    cadReady = false;
+    boot("CAD kernel failed to load, so exports are unavailable: " + msg +
+         " &mdash; the numbers and the setup sheet below are still correct.", "err");
+    syncButtons();
+  },
+};
 
 /* Accept shop-style input: 0.5, .5, 1/2, 1-1/2 */
 function parseLen(s) {
@@ -298,16 +362,32 @@ const f4 = (v) => (v >= 0 ? "" : "-") + Math.abs(v).toFixed(4) + '"';
 const ratio = (v) => v.toFixed(1).replace(/\.0$/, "");
 const sgn = (v) => (v > 0 ? "+" : v < 0 ? "−" : "±") + Math.abs(v).toFixed(4) + '"';
 
+/* The setup sheet is pure arithmetic and ships as soon as Python is up; the
+   solid formats need the CAD kernel. */
+function syncButtons() {
+  const ok = !!(state && state.ok);
+  document.querySelectorAll(".exports button").forEach((b) => {
+    const needsCad = b.dataset.fmt !== "report";
+    b.disabled = !ok || !coreReady || (needsCad && !cadReady);
+  });
+}
+
 async function refresh() {
+  if (!coreReady) return;
   const p = payload();
   if (Object.values(p).some((v) => typeof v === "number" && isNaN(v))) {
     $("messages").innerHTML = '<div class="msg err">Could not read one of the inputs. Use a decimal (0.500) or a fraction (1/2).</div>';
+    state = null;
+    syncButtons();
     return;
   }
-  const res = await fetch("/api/compute", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p),
-  });
-  state = await res.json();
+  state = JSON.parse(await window.mrttCompute(JSON.stringify(p)));
+  if (state.fatal) {
+    $("messages").innerHTML = state.errors
+      .map((e) => `<div class="msg err">${e}</div>`).join("");
+    syncButtons();
+    return;
+  }
   render();
 }
 
@@ -318,7 +398,7 @@ function render() {
     errors.map((e) => `<div class="msg err"><strong>Cannot build:</strong> ${e}</div>`).join("") +
     warnings.map((w) => `<div class="msg warn">${w}</div>`).join("");
 
-  document.querySelectorAll(".exports button").forEach((b) => (b.disabled = !ok));
+  syncButtons();
 
   $("derived").innerHTML = `
     <dt>Tenon width</dt><dd>${f4(d.tenon_width)}</dd>
@@ -512,27 +592,23 @@ function drawSide(d) {
 document.querySelectorAll(".exports button").forEach((btn) => {
   btn.onclick = async () => {
     const fmt = btn.dataset.fmt;
-    const url = fmt === "report" ? "/api/report" : `/api/export/${fmt}`;
     $("busy").textContent = "Generating…";
-    btn.disabled = true;
+    document.querySelectorAll(".exports button").forEach((b) => (b.disabled = true));
+    // The kernel runs on this thread, so let the label paint before it blocks.
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
     try {
-      const res = await fetch(url, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload()),
-      });
-      if (!res.ok) throw new Error((await res.text()).slice(0, 300));
-      const blob = await res.blob();
-      const cd = res.headers.get("Content-Disposition") || "";
-      const m = cd.match(/filename="?([^";]+)"?/);
+      const out = await window.mrttExport(fmt, JSON.stringify(payload()));
+      const blob = new Blob([out.data], { type: out.mime });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = m ? m[1] : `template.${fmt}`;
+      a.download = out.name;
       a.click();
       URL.revokeObjectURL(a.href);
-      $("busy").textContent = "Saved " + a.download;
+      $("busy").textContent = "Saved " + out.name;
     } catch (e) {
-      $("busy").textContent = "Failed: " + e.message;
+      $("busy").textContent = "Failed: " + (e.message || e);
     } finally {
-      btn.disabled = false;
+      syncButtons();
     }
   };
 });
@@ -543,7 +619,8 @@ INPUTS.forEach((id) => $(id).addEventListener("input", () => {
   timer = setTimeout(refresh, 220);
 }));
 $("engrave").addEventListener("change", refresh);
-refresh();
 </script>
+
+<script type="py" src="./bridge.py" config="./pyscript.toml"></script>
 </body>
 </html>
