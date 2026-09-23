@@ -39,6 +39,41 @@
   }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 
+  /* Phones. The 28px gutters alone cost 15% of a 375px screen, and every tap
+     target here was sized for a mouse. Preview type is scaled in JS instead -
+     it lives in viewBox units, so CSS cannot reach it without breaking the
+     dimension stacks. */
+  @media (max-width: 700px) {
+    header { padding: 14px 16px; }
+    header h1 { font-size: 16px; }
+    #boot { padding: 9px 16px; }
+    main { padding: 16px 16px 48px; gap: 16px; }
+    footer { padding: 0 16px 40px; }
+    .panel { padding: 16px 14px; }
+    .panel + .panel { margin-top: 14px; }
+
+    /* Touch targets: 24px-tall preset chips are a mouse affordance. */
+    .presets { gap: 8px; }
+    .presets button { padding: 9px 13px; font-size: 13px; }
+    .exports { gap: 8px; }
+    .exports button { padding: 13px 16px; flex: 1 1 auto; }
+    .cad-note button { padding: 12px 16px; width: 100%; }
+    .check input { width: 20px; height: 20px; }
+    details.adv summary { padding: 6px 0; }
+
+    /* Four columns of tabular numbers do not fit in 343px at 13px. */
+    table { font-size: 12px; }
+    th { padding: 0 5px 8px; font-size: 10px; letter-spacing: 0.03em; }
+    td { padding: 8px 5px; }
+
+    /* The derived list is a two-column grid of long labels and long values. */
+    .derived { font-size: 12px; gap: 6px 10px; }
+
+    /* 68 columns of monospace will not fit any phone; let it scroll on its
+       own rather than dragging the page sideways with it. */
+    pre.report { font-size: 10px; padding: 12px; }
+  }
+
   #boot {
     padding: 9px 28px; font-size: 13px; background: var(--accent-soft);
     color: var(--accent); border-bottom: 1px solid #f0d9c6;
@@ -615,6 +650,17 @@ const path = (d, stroke, dash, width) =>
 const DIM = "#8a9096", MONO = "ui-monospace,Menlo,Consolas,monospace";
 const dimTxt = (v) => v.toFixed(3);
 
+/* Preview type is sized in viewBox units, so it shrinks with the drawing: the
+   760-unit plan painted into ~350 CSS px puts 11.5-unit labels at about 5 px,
+   which is what makes the previews unreadable on a phone.
+
+   Scaling the type alone is not enough - the dimension stacks are spaced for
+   11.5-unit text and the labels collide. So TXT multiplies the type AND every
+   offset and margin that has to make room for it, and the plan gets a taller
+   viewBox to pay for it. Vertical space is cheap on a phone; width is not. */
+let TXT = 1;
+const textScale = () => (window.innerWidth <= 700 ? 1.8 : 1);
+
 /* Arrowhead with its tip at (x,y), body running along (dx,dy). */
 function arrow(x, y, dx, dy, c) {
   const L = 7, W = 2.5, px = -dy, py = dx;
@@ -635,8 +681,8 @@ function dimH(x1, x2, y, yFrom, label, c) {
   ];
   const o = tight ? -1 : 1;
   g.push(arrow(x1, y, o, 0, c), arrow(x2, y, -o, 0, c));
-  g.push(`<text x="${(x1 + x2) / 2}" y="${y - 6}" text-anchor="middle" font-size="11.5" ` +
-         `fill="${c}" font-family="${MONO}">${label}</text>`);
+  g.push(`<text x="${(x1 + x2) / 2}" y="${y - 6 * TXT}" text-anchor="middle" ` +
+         `font-size="${11.5 * TXT}" fill="${c}" font-family="${MONO}">${label}</text>`);
   return g.join("");
 }
 
@@ -651,9 +697,9 @@ function dimV(y1, y2, x, xFrom, label, c) {
   ];
   const o = tight ? -1 : 1;
   g.push(arrow(x, y1, 0, o, c), arrow(x, y2, 0, -o, c));
-  const tx = x + dir * 13, ty = (y1 + y2) / 2;
-  g.push(`<text x="${tx}" y="${ty}" text-anchor="middle" font-size="11.5" fill="${c}" ` +
-         `font-family="${MONO}" transform="rotate(-90 ${tx} ${ty})">${label}</text>`);
+  const tx = x + dir * 13 * TXT, ty = (y1 + y2) / 2;
+  g.push(`<text x="${tx}" y="${ty}" text-anchor="middle" font-size="${11.5 * TXT}" ` +
+         `fill="${c}" font-family="${MONO}" transform="rotate(-90 ${tx} ${ty})">${label}</text>`);
   return g.join("");
 }
 
@@ -662,8 +708,10 @@ function dimV(y1, y2, x, xFrom, label, c) {
 const ACC = "#b4531f", GRN = "#1f6b45", SLOT = "#3a5a8c";
 
 function drawPlan(d) {
-  const VW = 760, VH = 300;
-  const ML = 60, MR = 178, MT = 98, MB = 28;
+  TXT = textScale();
+  const VW = 760, VH = Math.round(300 + 80 * (TXT - 1));
+  const ML = 60, MR = Math.round(178 * TXT), MT = Math.round(98 * TXT), MB = 28;
+  $("plan").setAttribute("viewBox", `0 0 ${VW} ${VH}`);
   const s = Math.min((VW - ML - MR) / d.base_len, (VH - MT - MB) / d.base_wid);
   const cx = ML + (VW - ML - MR) / 2, cy = MT + (VH - MT - MB) / 2;
   const R = cx + (d.base_len * s) / 2;
@@ -699,7 +747,7 @@ function drawPlan(d) {
       { v: d.prof_len_top, t: "top", c: ACC },
       { v: d.prof_len_base, t: "base", c: ACC },
     ],
-    (o, i) => g.push(dimH(cx - hx(o.v), cx + hx(o.v), T - 24 - i * 26, T,
+    (o, i) => g.push(dimH(cx - hx(o.v), cx + hx(o.v), T - (24 + i * 26) * TXT, T,
                           `${o.t} ${dimTxt(o.v)}`, o.c)),
   );
 
@@ -709,7 +757,7 @@ function drawPlan(d) {
       { v: d.prof_wid_top, t: "top", c: ACC },
       { v: d.prof_wid_base, t: "base", c: ACC },
     ],
-    (o, i) => g.push(dimV(cy - hx(o.v), cy + hx(o.v), R + 34 + i * 36, R,
+    (o, i) => g.push(dimV(cy - hx(o.v), cy + hx(o.v), R + (34 + i * 36) * TXT, R,
                           `${o.t} ${dimTxt(o.v)}`, o.c)),
   );
 
@@ -719,8 +767,10 @@ function drawPlan(d) {
 /* --- side elevation ---------------------------------------------------- */
 
 function drawSide(d) {
-  const VW = 760, VH = 210;
-  const ML = 62, MR = 118, MT = 34, MB = 48;
+  TXT = textScale();
+  const VW = 760, VH = Math.round(210 + 40 * (TXT - 1));
+  const ML = 62, MR = Math.round(118 * TXT), MT = 34, MB = Math.round(48 * TXT);
+  $("side").setAttribute("viewBox", `0 0 ${VW} ${VH}`);
   const s = Math.min((VW - ML - MR) / d.base_len, (VH - MT - MB) / d.total_thk);
   const cx = ML + (VW - ML - MR) / 2;
   const base = VH - MB;
@@ -755,13 +805,13 @@ function drawSide(d) {
 
   // Only the tapered profile is dimensioned here; the holder interface is
   // fixed and documented on the setup sheet.
-  g.push(dimV(y(z0 + d.profile_thk), y(z0), cx + half(d.base_len) + 34,
+  g.push(dimV(y(z0 + d.profile_thk), y(z0), cx + half(d.base_len) + 34 * TXT,
               cx + half(d.base_len), dimTxt(d.profile_thk), ACC));
 
-  g.push(`<text x="${cx + half(d.prof_len_base) + 10}" y="${y(z0 + d.profile_thk) + 2}" ` +
-         `font-size="11.5" fill="${ACC}" font-family="${MONO}">${d.draft_deg.toFixed(2)}&#176;</text>`);
-  g.push(`<text x="${cx - half(d.base_len)}" y="${y(0) + 20}" font-size="11" fill="${DIM}" ` +
-         `font-family="${MONO}">engraved face / print bed</text>`);
+  g.push(`<text x="${cx + half(d.prof_len_base) + 10 * TXT}" y="${y(z0 + d.profile_thk) + 2}" ` +
+         `font-size="${11.5 * TXT}" fill="${ACC}" font-family="${MONO}">${d.draft_deg.toFixed(2)}&#176;</text>`);
+  g.push(`<text x="${cx - half(d.base_len)}" y="${y(0) + 20 * TXT}" font-size="${11 * TXT}" ` +
+         `fill="${DIM}" font-family="${MONO}">engraved face / print bed</text>`);
 
   $("side").innerHTML = g.join("");
 }
@@ -793,6 +843,20 @@ document.querySelectorAll(".exports button").forEach((btn) => {
 });
 
 $("cadLoad").addEventListener("click", () => { ensureCad(); });
+
+/* Crossing the 700px line changes the preview type scale, and rotating a phone
+   crosses it. Redrawing is pure JS against the state we already have - no
+   Python round-trip - so it is cheap enough to do on resize. */
+let resizeTimer, lastScale = textScale();
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (textScale() === lastScale || !state || !state.ok) return;
+    lastScale = textScale();
+    drawPlan(state.dims);
+    drawSide(state.dims);
+  }, 150);
+});
 
 let timer;
 INPUTS.forEach((id) => $(id).addEventListener("input", () => {

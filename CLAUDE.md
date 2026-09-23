@@ -364,6 +364,13 @@ profile-at-top and resulting tenon. Holder-interface dimensions were removed on
 request. The dimension stack sorts by size so the nesting stays correct when
 the template comes out smaller than the tenon.
 
+There is deliberately **no advice about which router bit to use**. A prompt
+recommending a particular bit was added and then removed on request. Any bit
+produces a correct template — that is the whole point of
+`offset = bit_dia - stylus_dia` and of the mismatched-bit case in
+`check_geometry.py` — and the page states the consequences of the choice
+through the dimensions it already shows. Do not reintroduce it.
+
 ## State of validation
 
 Verified in software: the factory calibration point, cross-sections at multiple

@@ -184,6 +184,16 @@ class Spec:
         self.issues.append(Issue("warning", msg))
 
     def _validate(self) -> None:
+        """At most ONE error, in order of how fundamental it is.
+
+        These checks are not independent - one undersized profile trips
+        several of them at once, each describing the same problem from a
+        different angle, and each suggesting a different fix. Two banners
+        reading "cannot build" is two problems as far as the reader is
+        concerned. So every error path returns, and the first one to fire is
+        the one that gets reported. Warnings may still accumulate: they
+        describe a part that can actually be made.
+        """
         # Fundamental checks first. If the shape cannot exist at all, the
         # downstream fit-and-clearance advice is just noise.
         if self.tenon_length <= self.tenon_width:
@@ -213,6 +223,7 @@ class Spec:
                 f"its narrow end. Too fragile to print or to survive a bearing. "
                 f"Use a larger bit."
             )
+            return
         elif self.prof_wid_top < C.MIN_PROFILE_WID_WARN:
             self._warn(
                 f'Guide profile is narrow ({self.prof_wid_top:.3f}" at the top, '
@@ -229,17 +240,13 @@ class Spec:
                 f'length for this bit is '
                 f'{max_tenon:.3f}".'
             )
+            return
         elif self.prof_len_base > self.mid_len:
             self._warn(
                 f"Guide profile is longer than the middle step, so it will "
                 f"overhang layer 2 at both ends. Prints fine, but check "
                 f"clearance in the holder."
             )
-
-        # Clearance advice is only meaningful for a part that can actually be
-        # made, so hold it back if anything above already failed.
-        if not self.ok:
-            return
 
         if self.prof_wid_base > self.mid_len or self.prof_wid_base > self.mid_wid:
             max_bit = (
@@ -254,15 +261,13 @@ class Spec:
                 f'{self.tenon_width:.3f}" tenon the bit must stay under '
                 f'{max_bit:.4f}".'
             )
+            return
 
         if self.mortise_slot:
             self._validate_slot()
 
     def _validate_slot(self) -> None:
         """The slot is cut out of the guide profile, so it spends its wall."""
-        if not self.ok:
-            return
-
         # Measured at the top face - the profile's smallest cross-section, and
         # the one the slot has to fit inside.
         if self.slot_wall_side <= C.MIN_SLOT_WALL_ERROR:
@@ -274,6 +279,7 @@ class Spec:
                 f"so it would fold up under load. Use a bigger router bit, or "
                 f'turn the slot off - a pin under {max_pin:.4f}" would fit.'
             )
+            return
         elif self.slot_wall_side < C.MIN_SLOT_WALL_WARN:
             self._warn(
                 f'Mortise slot leaves {self.slot_wall_side:.3f}" of wall each '
