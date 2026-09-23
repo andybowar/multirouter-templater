@@ -1,8 +1,11 @@
-# Multi-Router & PantoRouter Tapered Tenon Template Generator
+# Multi-Router Tapered Tenon Template Generator
 
-Generates 3D-printable tenon templates for the **JDS / Woodpeckers Multi-Router** (1:1 linkage) and the **PantoRouter** (2:1 pantograph linkage), featuring a tapered guide profile so you can sneak up on a joint fit instead of printing a new template every time.
+Generates 3D-printable tenon templates for the **JDS / Woodpeckers
+Multi-Router** (1:1 linkage), compatible with the factory template holder, with
+a tapered guide profile so you can sneak up on a joint fit instead of printing a
+new template every time.
 
-It is a static web page. Open it, select your machine, type a tenon, download a file — there is no
+It is a static web page. Open it, type a tenon, download a file — there is no
 server, no account, and nothing you type leaves the tab. The geometry, the CAD
 kernel and the exporters are Python compiled to WebAssembly, running in the
 browser via [PyScript](https://pyscript.net).
@@ -18,10 +21,11 @@ install — the standard library is enough, because the page fetches its own
 Python. It does have to be served over http; opening `index.html` off the disk
 will not work.
 
-The first page load pulls down about 23 MB of OpenCascade and takes a minute or
-two. The browser caches it, so later visits are quick. The numbers, the preview
-and the setup sheet appear immediately; only the solid formats wait for the CAD
-kernel.
+The page itself is small and comes up in a second or two; the numbers, the
+previews and the setup sheet are usable straight away. On a desktop the ~23 MB
+OpenCascade build then downloads in the background and the 3D buttons light up
+when it lands. The browser caches it, so later visits are quick. On a phone it
+is not downloaded at all — see below.
 
 To run the CAD code on a workstation instead — scripting exports, poking at a
 solid:
@@ -45,14 +49,14 @@ implementation to keep in step.
 
 ## Using it
 
-Key inputs:
+The inputs:
 
 | Input | What it is |
 |---|---|
-| **Machine** | Multi-Router (1:1 ratio) or PantoRouter (2:1 ratio) |
 | **Tenon width** | The mortise width — i.e. the bit you cut the *mortise* with |
 | **Tenon length** | The long dimension of the tenon |
 | **Router bit diameter** | The bit you'll cut the *tenon* with. Need not match the mortising bit |
+| **Add mortise slot** | Optional. Cuts a stop-collar slot for the stepped end of the stylus pin — see below |
 
 Tenon *depth* — how far it protrudes from the shoulder — is your plunge
 setting, not template geometry, so it isn't an input.
@@ -63,6 +67,22 @@ diameters, not nominal.
 Then download **STL** or **3MF** for the slicer, **STEP** for Fusion 360, or
 **DXF** for flat outlines. The **setup sheet** is a printable text file with
 the dimensions, the adjustment table and print settings.
+
+## On a phone
+
+The calculator is the app; the CAD kernel is an optional extra, and the page
+is built so you never pay for it unless you want a solid.
+
+| | What you get | What it costs |
+|---|---|---|
+| **Everything, everywhere** | validation, dimensions, taper maths, adjustment table, both previews, setup sheet | a normal web page |
+| **3D export, desktop** | STL / STEP / 3MF / DXF | the kernel downloads in the background while you type; the buttons enable when it is ready |
+| **3D export, phone or tablet** | the same | nothing is downloaded, and the buttons stay disabled with an explanation, because initialising OpenCascade can crash a mobile browser |
+
+So an iPhone in the shop can work out the template it needs, read the
+adjustment table and save the setup sheet without ever touching the 23 MB
+download. If you want the STL on that phone anyway there is a **Load CAD
+Export Engine** button — it just will not happen behind your back.
 
 ## Adjusting the fit
 
@@ -75,42 +95,55 @@ face. Flush = 0. Deeper = bigger tenon.
 
 | Bearing depth | Tenon |
 |---|---|
-| flush | −0.010" |
-| 1/16" | −0.005" |
+| flush | −0.0225" |
+| 1/16" | −0.01125" |
 | **1/8"** | **nominal** |
-| 3/16" | +0.005" |
-| 1/4" | +0.010" |
+| 3/16" | +0.01125" |
+| 1/4" | +0.0225" |
 
-**1/16" of bearing travel = 0.005" of tenon.** That's a 12.5:1 reduction, so a
-sloppy 0.010" error setting the bearing is worth 0.0008" on the tenon. Nominal
+**0.028" of bearing travel = 0.005" of tenon.** That's a 5.6:1 reduction, so a
+sloppy 0.010" error setting the bearing is worth 0.0018" on the tenon. Nominal
 sits in the middle of the range, so you can go either way after a test cut:
 tight, back the bearing out; loose, push it in.
 
 Cut a test tenon, try it, move the bearing, cut again.
 
-## The parts & holder interfaces
+## The mortise slot (optional)
 
-### Multi-Router (1:1)
-Three-layer stepped solid designed to clamp into the Multi-Router fixture bed. The bottom two layers match the factory template:
+Tick **Add mortise slot** and the template gets a slot down the middle of the
+guide profile, sized for the stepped-down end of the stylus pin (0.1920" on
+this machine). It cuts nothing — it sets up the *other* half of the joint.
+
+Turn the stylus around, drop the small pin into the slot, run the table to one
+end of the slot and lock that stop collar, then the other end and lock the
+second. The mortise then comes out the length of the tenon this same template
+cuts, without measuring anything.
+
+The length is derived, not copied: the mortise is cut in one pass with a bit
+the width of the tenon, so the bit centre travels `tenon length − tenon width`,
+and the linkage is 1:1, so the pin has to travel the same. For the default
+1/2" × 2" tenon that is a 0.200" × 1.692" slot, 0.250" deep.
+
+The slot spends wall out of the guide profile — the part the bearing pushes
+against — so on a small bit the app will warn, and on a very small one it will
+refuse. Untick the box and you get the plain template.
+
+## The part
+
+Three layers. The bottom two match the factory template and are fixed; only the
+tapered guide profile is computed.
 
 | Layer | Size | Thickness |
 |---|---|---|
 | base plate | 3.500 × 1.000" | 0.250" (square corners) |
 | middle step | 3.250 × 0.750" | 0.125" (stadium) |
-| guide profile | computed (1:1) | 0.250" (~4.57° draft) |
+| guide profile | computed | 0.250" (~5.14° draft) |
 
-### PantoRouter (2:1)
-Direct T-slot mounted template designed for the extruded aluminum template holder:
+Overall 0.625", against 0.500" for the factory template — the guide profile is
+thicker to make room for the taper.
 
-| Feature | Dimension | Function |
-|---|---|---|
-| base mounting flange | adaptive × 2.000" | 0.200" thick base with rounded ends |
-| rear alignment key | 0.375" wide × 0.080" high | Indexes into the template holder T-slot track |
-| mounting holes | 2× ⌀ 0.216" (M5 clearance) | ⌀ 0.375" counterbores for M5 screws & T-nuts |
-| guide profile | computed (2:1 scale) | 0.500" thick (5.71° draft, matching 5°–6° factory templates) |
-| standard stylus | 22 mm (0.866") | Standard tenon guide bearing (10, 15, 22, 26, 35 mm set) |
-
-The back/base face is engraved with the machine name, router bit size and resulting tenon size.
+The back face is engraved with the router bit size and the resulting tenon
+size, so you can identify a template on the shelf.
 
 ## Printing
 
@@ -129,7 +162,8 @@ Files export in millimetres.
 
 Print the default configuration (0.500" tenon, 2.000" long, 0.500" bit) and
 measure across the guide profile at its base. It should read
-**0.6350" × 2.1350"**.
+**0.6475" × 2.1475"** — the 0.6250" × 2.1250" nominal plus half the 0.045"
+taper range.
 
 That number transfers 1:1 to the tenon. Closing any gap is exactly what the
 taper is for.

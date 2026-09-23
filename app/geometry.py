@@ -50,13 +50,37 @@ The stylus bearing is flush with its rod and the same diameter (no protruding
 stud), so the deepest engaged circle is always the bearing's front edge: there
 is nothing ahead of it to bottom out, and nothing behind it wide enough to
 touch the profile at a shallower setting.
+
+Mortise slot
+------------
+Optional, and it cuts nothing. The stylus has a stepped-down pin on its far
+end; you turn the stylus around, drop that pin into a slot in the template,
+slide the table to each end of the slot and lock a stop collar there. The
+slot's travel is therefore the mortise's travel.
+
+The mortise has to accept the tenon, so it is `tenon_length` long, and it is
+cut in one pass with a bit of `tenon_width` diameter (that is what makes it a
+stadium of that width - the same fact that fixes the tenon's end radius). So
+the bit centre has to travel:
+
+    bit travel = tenon_length - tenon_width
+
+and the linkage is 1:1, so the pin travels exactly as far. Inside a stadium
+slot a pin of diameter `d` can move `slot_len - d` end to end, whatever the
+slot's width - the end arcs and the pin are concentric at the limit. Hence:
+
+    slot_len = (tenon_length - tenon_width) + pin_dia      exact, no slack
+    slot_wid = pin_dia + SLOT_CLEARANCE                    fit only
+
+Clearance goes on the width alone. Width slack costs a little centring; length
+slack would run every mortise long, and there is nothing downstream to catch
+it.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from math import atan, degrees
-from typing import Any
 
 from . import config as C
 
@@ -78,8 +102,8 @@ class Spec:
     stylus_dia: float = C.STYLUS_DIA
     taper_range: float = C.TAPER_RANGE
     profile_thk: float = C.PROFILE_THK
-    machine: str = "multirouter"  # "multirouter" | "pantorouter"
-    linkage_ratio: float = 1.0
+    mortise_slot: bool = False  # cut the stop-collar slot for the stepped pin
+    pin_dia: float = C.STYLUS_PIN_DIA
 
     # --- derived ----------------------------------------------------------
     offset: float = field(init=False)
@@ -98,77 +122,56 @@ class Spec:
     mid_len: float = field(init=False)
     mid_wid: float = field(init=False)
     mid_thk: float = field(init=False)
-    tab_wid: float = field(init=False, default=0.0)
-    tab_thk: float = field(init=False, default=0.0)
-    hole_dia: float = field(init=False, default=0.0)
-    cbore_dia: float = field(init=False, default=0.0)
-    cbore_depth: float = field(init=False, default=0.0)
-    hole_offset_x: float = field(init=False, default=0.0)
     total_thk: float = field(init=False)
+    slot_len: float = field(init=False)
+    slot_wid: float = field(init=False)
+    slot_travel: float = field(init=False)
+    slot_depth: float = field(init=False)
+    slot_wall_side: float = field(init=False)
+    slot_wall_end: float = field(init=False)
     issues: list[Issue] = field(init=False, default_factory=list)
 
     def __post_init__(self) -> None:
-        norm_machine = str(self.machine).lower().strip()
-        if norm_machine in ("pantorouter", "panto") or self.linkage_ratio == 2.0:
-            self.machine = "pantorouter"
-            self.linkage_ratio = 2.0
-            # PantoRouter template body with T-slot mounting interface
-            self.base_thk = C.PANTO_BASE_THK
-            self.mid_len = 0.0
-            self.mid_wid = 0.0
-            self.mid_thk = 0.0
-            self.tab_wid = C.PANTO_TAB_WID
-            self.tab_thk = C.PANTO_TAB_THK
-            self.hole_dia = C.PANTO_HOLE_DIA
-            self.cbore_dia = C.PANTO_CBORE_DIA
-            self.cbore_depth = C.PANTO_CBORE_DEPTH
-        else:
-            self.machine = "multirouter"
-            self.linkage_ratio = 1.0
-            self.base_len = C.BASE_LEN
-            self.base_wid = C.BASE_WID
-            self.base_thk = C.BASE_THK
-            self.mid_len = C.MID_LEN
-            self.mid_wid = C.MID_WID
-            self.mid_thk = C.MID_THK
-            self.tab_wid = 0.0
-            self.tab_thk = 0.0
-            self.hole_dia = 0.0
-            self.cbore_dia = 0.0
-            self.cbore_depth = 0.0
-            self.hole_offset_x = 0.0
+        # The holder interface is fixed - it matches the factory template.
+        self.base_len = C.BASE_LEN
+        self.base_wid = C.BASE_WID
+        self.base_thk = C.BASE_THK
+        self.mid_len = C.MID_LEN
+        self.mid_wid = C.MID_WID
+        self.mid_thk = C.MID_THK
 
-        self.offset = self.linkage_ratio * self.bit_dia - self.stylus_dia
+        self.offset = self.bit_dia - self.stylus_dia
 
-        self.prof_len_nom = (
-            self.linkage_ratio * (self.tenon_length + self.bit_dia) - self.stylus_dia
-        )
-        self.prof_wid_nom = (
-            self.linkage_ratio * (self.tenon_width + self.bit_dia) - self.stylus_dia
-        )
+        self.prof_len_nom = self.tenon_length + self.offset
+        self.prof_wid_nom = self.tenon_width + self.offset
 
         # Nominal sits at mid-depth so the operator can adjust either way from
-        # a test cut. To achieve taper_range change on the cut tenon, the
-        # template profile variation is scaled by linkage_ratio.
-        half_template = (self.linkage_ratio * self.taper_range) / 2.0
-        self.prof_len_base = self.prof_len_nom + half_template
-        self.prof_wid_base = self.prof_wid_nom + half_template
-        self.prof_len_top = self.prof_len_nom - half_template
-        self.prof_wid_top = self.prof_wid_nom - half_template
-
-        if self.machine == "pantorouter":
-            # PantoRouter mounting base adapts to enclose the profile + M5 mounting holes
-            self.base_len = max(3.50, self.prof_len_base + 1.50)
-            self.base_wid = max(C.PANTO_MIN_BASE_WID, self.prof_wid_base + 0.50)
-            self.hole_offset_x = (self.prof_len_base / 2.0) + 0.450
+        # a test cut.
+        half = self.taper_range / 2.0
+        self.prof_len_base = self.prof_len_nom + half
+        self.prof_wid_base = self.prof_wid_nom + half
+        self.prof_len_top = self.prof_len_nom - half
+        self.prof_wid_top = self.prof_wid_nom - half
 
         # Per-side rise over the profile depth.
-        self.draft_deg = degrees(atan(half_template / self.profile_thk))
+        self.draft_deg = degrees(atan(half / self.profile_thk))
 
         self.travel_per_5thou = 0.005 / self.taper_range * self.profile_thk
         self.reduction_ratio = self.profile_thk / self.taper_range
 
         self.total_thk = self.base_thk + self.mid_thk + self.profile_thk
+
+        # Mortise slot. Always computed so the page can show what it would be;
+        # only cut, and only validated, when it is asked for.
+        self.slot_travel = self.tenon_length - self.tenon_width
+        self.slot_len = self.slot_travel + self.pin_dia
+        self.slot_wid = self.pin_dia + C.SLOT_CLEARANCE
+        # Sunk through the profile layer and no further: layers 1 and 2 are the
+        # holder interface and are not ours to cut into.
+        self.slot_depth = self.profile_thk
+        # Wall is measured at the top face, the smallest cross-section.
+        self.slot_wall_side = (self.prof_wid_top - self.slot_wid) / 2.0
+        self.slot_wall_end = (self.prof_len_top - self.slot_len) / 2.0
 
         self._validate()
 
@@ -191,9 +194,10 @@ class Spec:
             )
             return
 
-        # The template is derived from linkage_ratio * (tenon + bit) - stylus.
+        # The template is the tenon shifted by (bit - stylus) per dimension. A
+        # bit much smaller than the stylus shrinks it away to nothing.
         if self.prof_wid_nom <= 0:
-            min_bit = (self.stylus_dia / self.linkage_ratio) - self.tenon_width
+            min_bit = self.stylus_dia - self.tenon_width
             self._err(
                 f'A {self.bit_dia:.4f}" bit is too small to cut a '
                 f'{self.tenon_width:.4f}" tenon on this machine: the template '
@@ -217,53 +221,76 @@ class Spec:
                 f"tenon to run a touch fat."
             )
 
-        if self.machine == "multirouter":
-            if self.prof_len_base > self.base_len:
-                max_tenon = (
-                    self.base_len
-                    + self.stylus_dia
-                    - (self.linkage_ratio * self.taper_range) / 2.0
-                ) / self.linkage_ratio - self.bit_dia
-                self._err(
-                    f'Guide profile would be {self.prof_len_base:.3f}" long, which '
-                    f'overhangs the {self.base_len:.3f}" base plate. Maximum tenon '
-                    f'length for this bit is '
-                    f'{max_tenon:.3f}".'
-                )
-            elif self.prof_len_base > self.mid_len:
-                self._warn(
-                    f"Guide profile is longer than the middle step, so it will "
-                    f"overhang layer 2 at both ends. Prints fine, but check "
-                    f"clearance in the holder."
-                )
+        if self.prof_len_base > self.base_len:
+            max_tenon = self.base_len - self.offset - self.taper_range / 2
+            self._err(
+                f'Guide profile would be {self.prof_len_base:.3f}" long, which '
+                f'overhangs the {self.base_len:.3f}" base plate. Maximum tenon '
+                f'length for this bit is '
+                f'{max_tenon:.3f}".'
+            )
+        elif self.prof_len_base > self.mid_len:
+            self._warn(
+                f"Guide profile is longer than the middle step, so it will "
+                f"overhang layer 2 at both ends. Prints fine, but check "
+                f"clearance in the holder."
+            )
 
-            # Clearance advice is only meaningful for a part that can actually be
-            # made, so hold it back if anything above already failed.
-            if not self.ok:
-                return
+        # Clearance advice is only meaningful for a part that can actually be
+        # made, so hold it back if anything above already failed.
+        if not self.ok:
+            return
 
-            if self.prof_wid_base > self.mid_len or self.prof_wid_base > self.mid_wid:
-                max_bit = (
-                    self.mid_wid
-                    + self.stylus_dia
-                    - (self.linkage_ratio * self.taper_range) / 2.0
-                ) / self.linkage_ratio - self.tenon_width
-                self._err(
-                    f'Guide profile would be {self.prof_wid_base:.3f}" wide, which '
-                    f'overhangs the {self.mid_wid:.3f}" middle layer. With a '
-                    f'{self.tenon_width:.3f}" tenon the bit must stay under '
-                    f'{max_bit:.4f}".'
-                )
-        else:
-            if self.tenon_length > 6.0:
-                self._warn(
-                    f'Tenon length ({self.tenon_length:.3f}") approaches the limit of '
-                    f"standard PantoRouter pantograph reach."
-                )
-            if self.prof_len_base > 14.0:
-                self._err(
-                    f'Guide profile ({self.prof_len_base:.3f}") exceeds the template holder capacity.'
-                )
+        if self.prof_wid_base > self.mid_len or self.prof_wid_base > self.mid_wid:
+            max_bit = (
+                self.mid_wid
+                - self.tenon_width
+                + self.stylus_dia
+                - self.taper_range / 2
+            )
+            self._err(
+                f'Guide profile would be {self.prof_wid_base:.3f}" wide, which '
+                f'overhangs the {self.mid_wid:.3f}" middle layer. With a '
+                f'{self.tenon_width:.3f}" tenon the bit must stay under '
+                f'{max_bit:.4f}".'
+            )
+
+        if self.mortise_slot:
+            self._validate_slot()
+
+    def _validate_slot(self) -> None:
+        """The slot is cut out of the guide profile, so it spends its wall."""
+        if not self.ok:
+            return
+
+        # Measured at the top face - the profile's smallest cross-section, and
+        # the one the slot has to fit inside.
+        if self.slot_wall_side <= C.MIN_SLOT_WALL_ERROR:
+            max_pin = self.prof_wid_top - 2 * C.MIN_SLOT_WALL_ERROR - C.SLOT_CLEARANCE
+            self._err(
+                f'A {self.slot_wid:.4f}" mortise slot leaves only '
+                f'{self.slot_wall_side:.3f}" of wall on each side of a '
+                f'{self.prof_wid_top:.3f}" profile. The bearing rides that wall, '
+                f"so it would fold up under load. Use a bigger router bit, or "
+                f'turn the slot off - a pin under {max_pin:.4f}" would fit.'
+            )
+        elif self.slot_wall_side < C.MIN_SLOT_WALL_WARN:
+            self._warn(
+                f'Mortise slot leaves {self.slot_wall_side:.3f}" of wall each '
+                f"side of the guide profile. It prints, but treat the template "
+                f"gently and check the profile width after a few tenons."
+            )
+
+        # The slot runs the length of the profile; if it runs past the end
+        # there is no template left to guide anything.
+        if self.slot_wall_end <= C.MIN_SLOT_WALL_ERROR:
+            self._err(
+                f'A {self.slot_len:.3f}" mortise slot leaves only '
+                f'{self.slot_wall_end:.3f}" at each end of a '
+                f'{self.prof_len_top:.3f}" profile. The slot is '
+                f'(tenon length - tenon width) + the {self.pin_dia:.4f}" pin, so '
+                f"it only fits when the bit is not much smaller than the stylus."
+            )
 
     @property
     def ok(self) -> bool:
@@ -308,9 +335,6 @@ class Spec:
 
     def as_dict(self) -> dict:
         return {
-            "machine": self.machine,
-            "machine_name": "PantoRouter" if self.machine == "pantorouter" else "Multi-Router",
-            "linkage_ratio": self.linkage_ratio,
             "bit_dia": self.bit_dia,
             "tenon_length": self.tenon_length,
             "tenon_width": self.tenon_width,
@@ -335,12 +359,14 @@ class Spec:
             "mid_len": self.mid_len,
             "mid_wid": self.mid_wid,
             "mid_thk": self.mid_thk,
-            "tab_wid": self.tab_wid,
-            "tab_thk": self.tab_thk,
-            "hole_dia": self.hole_dia,
-            "cbore_dia": self.cbore_dia,
-            "cbore_depth": self.cbore_depth,
-            "hole_offset_x": self.hole_offset_x,
+            "mortise_slot": self.mortise_slot,
+            "pin_dia": self.pin_dia,
+            "slot_len": self.slot_len,
+            "slot_wid": self.slot_wid,
+            "slot_travel": self.slot_travel,
+            "slot_depth": self.slot_depth,
+            "slot_wall_side": self.slot_wall_side,
+            "slot_wall_end": self.slot_wall_end,
         }
 
 
@@ -354,12 +380,13 @@ INPUT_BOUNDS: dict[str, tuple[float, float]] = {
     "stylus_dia": (0.0, 2.0),
     "taper_range": (0.0, 0.25),
     "profile_thk": (0.0, 2.0),
+    "pin_dia": (0.0, 1.0),
 }
 
 
 def spec_from_inputs(values: dict) -> Spec:
     """Build a Spec from untrusted input, raising ValueError on nonsense."""
-    kwargs: dict[str, Any] = {}
+    kwargs: dict[str, float | bool] = {}
     for name, (low, high) in INPUT_BOUNDS.items():
         if name not in values or values[name] is None:
             continue
@@ -376,33 +403,8 @@ def spec_from_inputs(values: dict) -> Spec:
             )
         kwargs[name] = v
 
-    if "machine" in values and values["machine"] is not None:
-        m = str(values["machine"]).lower().strip()
-        if m in ("pantorouter", "panto", "2:1", "2"):
-            kwargs["machine"] = "pantorouter"
-            kwargs["linkage_ratio"] = 2.0
-        elif m in ("multirouter", "multi-router", "multi", "1:1", "1"):
-            kwargs["machine"] = "multirouter"
-            kwargs["linkage_ratio"] = 1.0
-        else:
-            raise ValueError(f"unknown machine: {values['machine']}")
-    elif "linkage_ratio" in values and values["linkage_ratio"] is not None:
-        try:
-            r = float(values["linkage_ratio"])
-        except (TypeError, ValueError):
-            raise ValueError("linkage_ratio is not a number")
-        if r not in (1.0, 2.0):
-            raise ValueError("linkage_ratio must be 1.0 (Multi-Router) or 2.0 (PantoRouter)")
-        kwargs["linkage_ratio"] = r
-        kwargs["machine"] = "pantorouter" if r == 2.0 else "multirouter"
-
-    is_panto = kwargs.get("machine") == "pantorouter" or kwargs.get("linkage_ratio") == 2.0
-    if "stylus_dia" not in kwargs:
-        kwargs["stylus_dia"] = C.STYLUS_DIA_PANTOROUTER if is_panto else C.STYLUS_DIA_MULTI_ROUTER
-    if "taper_range" not in kwargs:
-        kwargs["taper_range"] = C.PANTO_TAPER_RANGE if is_panto else C.TAPER_RANGE
-    if "profile_thk" not in kwargs:
-        kwargs["profile_thk"] = C.PANTO_PROFILE_THK if is_panto else C.PROFILE_THK
+    if values.get("mortise_slot") is not None:
+        kwargs["mortise_slot"] = bool(values["mortise_slot"])
 
     missing = [n for n in ("bit_dia", "tenon_width", "tenon_length") if n not in kwargs]
     if missing:
@@ -434,8 +436,11 @@ def _frac_label(x: float) -> str:
 
 
 def file_stem(spec: Spec) -> str:
-    prefix = "pantorouter" if spec.machine == "pantorouter" else "multirouter"
+    # The slot changes the part, so it has to change the filename - otherwise
+    # two different templates for the same tenon land on top of each other in
+    # the downloads folder.
+    suffix = "_mslot" if spec.mortise_slot else ""
     return (
-        f"{prefix}_tenon_{spec.tenon_width:.3f}x{spec.tenon_length:.3f}"
-        f"_bit{spec.bit_dia:.3f}".replace(".", "p")
+        f"multirouter_tenon_{spec.tenon_width:.3f}x{spec.tenon_length:.3f}"
+        f"_bit{spec.bit_dia:.3f}".replace(".", "p") + suffix
     )

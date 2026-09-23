@@ -48,7 +48,7 @@ bit 0.500, tenon_width 0.500, tenon_length 2.000
 If a refactor breaks that, the refactor is wrong. Do not "fix" the expected
 value.
 
-## Three things that look like bugs but are not
+## Four things that look like bugs but are not
 
 ### 1. Tenon width is an input, not `bit_dia`
 
@@ -90,8 +90,29 @@ all. Tapering inward puts contact at the bearing's deepest engaged circle, so
 bearing depth selects the cross-section.
 
 The stylus bearing is flush with its rod and the same diameter (no protruding
-stud), which is why nothing can bottom out ahead of the bearing and nothing
-behind it is wide enough to touch the profile at a shallower setting.
+stud) *on the tenon-cutting end*, which is why nothing can bottom out ahead of
+the bearing and nothing behind it is wide enough to touch the profile at a
+shallower setting. The stepped-down pin is on the opposite end — you turn the
+stylus around to use it — so it is never between the bearing and the template.
+
+### 4. The mortise slot is clearanced on width but not on length
+
+```
+slot_wid = pin_dia + SLOT_CLEARANCE    <-- clearance
+slot_len = travel   + pin_dia          <-- NO clearance
+```
+
+That asymmetry is deliberate. The slot's ends are what the stop collars get
+set against, so the slot's travel *is* the mortise's length. Slack there comes
+straight out as a long mortise, and nothing downstream catches it. Slack across
+the width costs a little centring and nothing else, and without it the pin will
+not drop into a printed part.
+
+It is also why the width clearance is safe: inside a stadium slot a pin of
+diameter `d` travels `slot_len - d` end to end **whatever the slot's width** —
+at each limit the pin and the end arc are concentric, so the extra width
+cancels. Widening the slot does not lengthen the mortise. `check_geometry.py`
+asserts exactly this.
 
 ## Measured constants
 
@@ -102,18 +123,60 @@ silently** — the project brief explicitly required that.
 | Constant | Value | Source |
 |---|---|---|
 | `STYLUS_DIA` | 0.375" | measured with calipers; bearing flush with rod |
+| `STYLUS_PIN_DIA` | 0.1920" | measured with calipers; the stepped-down end |
 | linkage | 1:1 | machine design (not 2:1 like a PantoRouter) |
 | layer 1 | 3.500 × 1.000 × 0.250" | factory template, rectangle |
 | layer 2 | 3.250 × 0.750 × 0.125" | factory template, stadium |
 | layer 3 | 0.250" thick | design decision — hosts the taper |
-| `TAPER_RANGE` | 0.040" total | design decision |
+| `TAPER_RANGE` | 0.045" total | design decision |
 
 Layers 1 and 2 are the holder interface and are **fixed**. Only layer 3 is
 computed. Overall thickness is 0.625"; the factory template is 0.500".
 
-Taper defaults give ±0.010" over 0.250", i.e. 2.29° draft, 12.5:1 reduction,
-**1/16" of bearing travel = 0.005" of tenon**. Nominal sits at mid-depth so the
-operator can correct in either direction after a test cut.
+Taper defaults give **±0.0225" of tenon over 0.250" of bearing travel**: 5.14°
+of draft as `draft_deg` reports it, a 5.56:1 reduction, and 0.0278" of bearing
+travel per 0.005" of tenon. Nominal sits at mid-depth so the operator can
+correct in either direction after a test cut.
+
+`TAPER_RANGE` has been raised twice — 0.020" to 0.040" in `6abdf75`, then to
+0.045". **Every one of the figures above is derived from it**, so raising it
+again means re-deriving the draft angle, the reduction ratio, the travel per
+0.005", the profile-at-base dimension quoted in the README, and the expected
+values in `check_geometry.py`. The 0.040" bump changed the constant alone and
+left this file and the README stating half the real numbers for a while; don't
+repeat that.
+
+## The mortise slot
+
+Optional, off by default, and it **cuts nothing** — it is a setup aid. The
+stylus has a stepped-down pin on its far end; you turn the stylus around, drop
+that pin into the slot, run the table to each end and lock a stop collar there.
+The slot's travel becomes the mortise's travel.
+
+```
+mortise length = tenon_length            (the tenon has to fit it)
+mortise bit    = tenon_width             (already an input; single-pass stadium)
+bit travel     = tenon_length - tenon_width
+linkage 1:1    => pin travel = bit travel
+
+slot_len = (tenon_length - tenon_width) + pin_dia
+slot_wid = pin_dia + SLOT_CLEARANCE
+```
+
+It reuses the ground truth above rather than adding a second model: the same
+fact that fixes the tenon's end radius (`mortise_bit = tenon_width`) is what
+makes the travel term correct. Same `SlotOverall` primitive as everything else.
+
+The slot is sunk from the free top face to the **base of the profile and no
+further** — 0.250" deep. Layers 1 and 2 are the holder interface and are not
+ours to cut into. If the pin turns out to need more engagement than that, the
+answer is a thicker layer 3, not a deeper hole.
+
+It costs wall out of the guide profile, measured at the top face because that
+is the smallest cross-section, and the bearing loads exactly that wall. Hence
+`MIN_SLOT_WALL_ERROR` / `_WARN`. Note the end wall works out independent of
+tenon length — the `tenon_length` terms cancel — so a slot that fits at one
+length fits at every length for that bit.
 
 ## Units
 
@@ -147,12 +210,60 @@ is the only conversion point — keep it that way.
 - **The CAD kernel runs on the page's main thread**, so an export freezes the
   tab while it works. The UI paints its "Generating…" label and yields a frame
   before calling in. Do not remove that yield.
+- **Nothing may load the CAD kernel implicitly.** See below.
 - **Pin OCP.wasm.** `web/vendor/ocp_wasm_bootstrap.py` carries a pinned
   `OCP_WASM_VERSION`. It is third-party, it installs a patched `cadquery-ocp`
   from a GitHub release, and floating it would let a stranger's build change
   the geometry under you.
 - **Sectioning exactly at a layer interface** picks up the wrong layer. Offset
   by a small epsilon when verifying cross-sections.
+
+## Three levels of capability
+
+The page is a calculator that can also export solids, not a CAD app with a
+calculator bolted on. Loading OpenCascade costs ~23 MB and a large amount of
+memory, and on a phone it can take the tab down, so it is never loaded for a
+visitor who has not asked for a solid.
+
+| Level | What loads | When |
+|---|---|---|
+| 1. core | Python, `app.geometry`, `app.report` — validation, dimensions, taper, adjustment table, SVG previews, setup sheet | always, ~2 s |
+| 2. desktop CAD | OpenCascade + build123d | in the background, as soon as the core is up |
+| 3. mobile CAD | same | never on its own — only from the **Load CAD Export Engine** button |
+
+**Do not move the desktop fetch to the first export click.** That was tried
+and reverted: the 23 MB then lands *inside* the export, so the first STL takes
+a minute with nothing but a "Generating…" label to show for it, and it reads
+as a hang. Fetch early and gate the buttons instead — the download overlaps
+with the user typing dimensions, which is free.
+
+The rules that keep this true:
+
+- `web/pyscript.toml` lists `micropip` and the `app` modules. **Nothing heavy
+  goes in `packages`** — anything listed there is fetched before `bridge.py`
+  runs, which is exactly what level 1 is avoiding.
+- `bridge.py` imports `app.model` (and therefore build123d) **inside**
+  `export()` and `_bring_up_cad()`, never at module scope. A top-level import
+  would drag the kernel in for everyone.
+- `bridge.py` has no top-level `await` and starts nothing on its own. **The
+  page owns the policy**: it calls `window.mrttLoadCad()` from `coreReady()`
+  on a desktop, and from a button press on a phone. `load_cad()` is idempotent
+  and returns a bool.
+- `export()` refuses solid formats unless `_cad_ready`, so a stale button gets
+  a sentence instead of an `ImportError`.
+- In `index.html`, `ensureCad()` is the only path to the kernel and is
+  single-flight — a second call joins the in-flight load instead of starting
+  another.
+- `IS_MOBILE` prefers `navigator.userAgentData.mobile`, falls back to a UA
+  sniff, and checks `maxTouchPoints` because **iPadOS 13+ claims to be a
+  Mac** — the device most likely to run out of memory here is the one that
+  denies being mobile.
+- After a failed load the notice appears on desktop too, carrying the error
+  and a retry. Nothing retries by itself — re-running an OOM is how you lose
+  the tab.
+
+The setup sheet is level 1: it is text from `app.report`, exports with no
+kernel at all, and must stay that way.
 
 ## Why the loft is exact
 
@@ -224,8 +335,8 @@ app/model.py      build123d solid, engraving, STL/STEP/3MF/DXF export.
 app/report.py     the printable setup sheet.
 
 web/index.html    the UI: inputs, SVG previews, tables. Plain JS, no framework.
-web/bridge.py     what the page calls into. Exposes compute/export on window,
-                  and brings the CAD kernel up in the background.
+web/bridge.py     what the page calls into. Exposes compute/export/loadCad on
+                  window. Never starts the CAD kernel on its own.
 web/pyscript.toml which files land in Pyodide's filesystem.
 web/vendor/       pinned OCP.wasm bootstrap (third party).
 web/fonts/        DejaVu Sans, for engraving in a browser with no fonts.
@@ -267,9 +378,10 @@ measured across the profile base with calipers before it is trusted.
 
 - The part is 0.625" thick against the factory 0.500", so the bearing bracket
   needs 0.125" more protrusion than the user is used to.
-- Bearing protrusion is currently set "by feel". At 12.5:1 that is survivable,
-  but a caliper reading against a flat reference face on the bracket would make
-  the adjustment table exact rather than advisory.
+- Bearing protrusion is currently set "by feel". At 5.56:1 that is survivable —
+  0.010" of slop in the setting is 0.0018" on the tenon — but a caliper reading
+  against a flat reference face on the bracket would make the adjustment table
+  exact rather than advisory.
 - When the profile is narrower than layer 2 (0.750"), over-inserting the
   bearing makes it contact **layer 2** instead and cut oversize. The app warns
   per-configuration; there is no physical stop on the part.

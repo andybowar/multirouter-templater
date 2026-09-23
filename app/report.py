@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from . import config as C
 from .geometry import Spec
 
 
@@ -11,15 +10,8 @@ def build_report(spec: Spec) -> str:
     lines: list[str] = []
     w = lines.append
 
-    is_panto = d.machine == "pantorouter"
-    title = (
-        "PANTOROUTER (2:1) - TAPERED TENON TEMPLATE"
-        if is_panto
-        else "JDS MULTI-ROUTER - TAPERED TENON TEMPLATE"
-    )
-
     w("=" * 68)
-    w(f"  {title}")
+    w("  JDS MULTI-ROUTER - TAPERED TENON TEMPLATE")
     w("=" * 68)
     w("")
     w("TARGET TENON")
@@ -39,19 +31,13 @@ def build_report(spec: Spec) -> str:
     w("")
     w("MACHINE CONSTANTS USED")
     w(f'  Stylus bearing diameter  {d.stylus_dia:.4f}"')
-    if is_panto:
-        w("  Linkage ratio            2:1 (stylus travel = 2 x bit travel)")
-    else:
-        w("  Linkage ratio            1:1 (stylus travel = bit travel)")
+    w("  Linkage ratio            1:1 (stylus travel = bit travel)")
     w("  Bearing form             flush with the rod, same diameter, no stud")
     w("")
-    if is_panto:
-        w("  Transfer function:  template_dim = 2 * (tenon_dim + bit_dia) - stylus_dia")
-    else:
-        w("  Transfer function:  template_dim = tenon_dim + (bit_dia - stylus_dia)")
-        w(f'                      offset per dimension = {d.offset:+.4f}"')
+    w("  Transfer function:  template_dim = tenon_dim + (bit_dia - stylus_dia)")
+    w(f'                      offset per dimension = {d.offset:+.4f}"')
     w("")
-    w("GUIDE PROFILE")
+    w("GUIDE PROFILE (layer 3)")
     w(f'  Depth                    {d.profile_thk:.4f}"')
     w(f'  Draft angle              {d.draft_deg:.2f} deg per side, tapering inward toward the top')
     w("")
@@ -60,19 +46,31 @@ def build_report(spec: Spec) -> str:
     w(f'  At the free top face     {d.prof_wid_top:.4f}" x {d.prof_len_top:.4f}"')
     w(f'  End radius at nominal    {d.prof_wid_nom / 2:.4f}"')
     w("")
-    if is_panto:
-        w("HOLDER INTERFACE (PantoRouter T-slot extrusion mount)")
-        w(f'  Mounting base flange     {d.base_len:.3f}" x {d.base_wid:.3f}" x {d.base_thk:.3f}" thick, stadium ends')
-        w(f'  Rear alignment key       {d.base_len:.3f}" x {d.tab_wid:.3f}" x {d.tab_thk:.3f}" high (indexes in T-track)')
-        w(f'  Mounting holes           2x ⌀ {d.hole_dia:.3f}" clearance with ⌀ {d.cbore_dia:.3f}" counterbore for M5 screws')
-        w(f'  Guide profile            see above, {d.profile_thk:.3f}" thick ({d.draft_deg:.2f} deg draft)')
-        w(f'  Overall thickness        {d.total_thk:.3f}"')
-    else:
-        w("HOLDER INTERFACE (Multi-Router slide-in fixture plate)")
-        w(f'  Layer 1  base plate      {d.base_len:.3f}" x {d.base_wid:.3f}" x {d.base_thk:.3f}" thick, square corners')
-        w(f'  Layer 2  middle step     {d.mid_len:.3f}" x {d.mid_wid:.3f}" x {d.mid_thk:.3f}" thick, stadium')
-        w(f'  Layer 3  guide profile   see above, {d.profile_thk:.3f}" thick')
-        w(f'  Overall thickness        {d.total_thk:.3f}"')
+    if d.mortise_slot:
+        w("MORTISE SLOT (for the stepped end of the stylus pin)")
+        w(f'  Slot                     {d.slot_wid:.4f}" x {d.slot_len:.4f}", stadium, '
+          f'{d.slot_depth:.3f}" deep')
+        w(f'  Pin                      {d.pin_dia:.4f}" - the stepped-down end of the stylus')
+        w(f'  Travel between the ends  {d.slot_travel:.4f}" = tenon length - tenon width')
+        w(f'  Wall left in the profile {d.slot_wall_side:.3f}" each side, '
+          f'{d.slot_wall_end:.3f}" each end')
+        w("")
+        w("  This end of the stylus cuts nothing. Turn the stylus around, drop")
+        w("  the pin into the slot, run the table to one end of the slot and")
+        w("  lock that stop collar, then the other end and lock the second.")
+        w("  The mortise then matches the tenon this template cuts.")
+        w("")
+        w("  The slot's length is exact - it carries no clearance, because any")
+        w("  slack there runs the mortise long. The width carries the fit")
+        w("  clearance instead.")
+        w("")
+    w("HOLDER INTERFACE (fixed - matches the factory template)")
+    w(f'  Layer 1  base plate      {d.base_len:.3f}" x {d.base_wid:.3f}" x {d.base_thk:.3f}" thick, square corners')
+    w(f'  Layer 2  middle step     {d.mid_len:.3f}" x {d.mid_wid:.3f}" x {d.mid_thk:.3f}" thick, stadium')
+    w(f'  Layer 3  guide profile   see above, {d.profile_thk:.3f}" thick')
+    if d.mortise_slot:
+        w("                           slotted - see above")
+    w(f'  Overall thickness        {d.total_thk:.3f}"')
     w("")
     w("FIT ADJUSTMENT")
     w("")

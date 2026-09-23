@@ -6,8 +6,10 @@
 # in-memory filesystem, whose root is on sys.path.
 #
 # The CAD kernel is deliberately NOT here: build123d and its ~23 MB
-# WebAssembly OpenCascade build are installed later, in the background, so the
-# numbers on the page appear in a second instead of a minute. See bridge.py.
+# WebAssembly OpenCascade build are installed only when the user asks for a
+# solid, so the numbers on the page appear in a second instead of a minute and
+# a visitor on a phone never pays for a kernel they did not ask for. See
+# bridge.py.
 
 packages = ["micropip"]
 

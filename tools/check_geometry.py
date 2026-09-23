@@ -38,40 +38,39 @@ check("profile width at nominal", m.prof_wid_nom, 0.3750)
 check("profile length at nominal", m.prof_len_nom, 1.8750)
 check("tenon end radius follows the mortise", m.tenon_width / 2, 0.2500)
 
-print("pantorouter template (2:1 ratio), 1/2\" tenon cut with a 1/2\" bit and 22mm bearing")
-p = Spec(
-    bit_dia=0.5,
-    tenon_width=0.5,
-    tenon_length=2.0,
-    machine="pantorouter",
-    stylus_dia=0.8661,
-    taper_range=0.050,
-    profile_thk=0.500,
-)
-check("pantorouter profile width at nominal", p.prof_wid_nom, 1.1339, tol=1e-4)
-check("pantorouter profile length at nominal", p.prof_len_nom, 4.1339, tol=1e-4)
-check("pantorouter linkage ratio", p.linkage_ratio, 2.0)
-check("pantorouter draft angle (~5.71 deg)", p.draft_deg, 5.7106, tol=1e-3)
-check("pantorouter taper delta, bearing flush", p.tenon_delta(0.0), -0.0250)
-check("pantorouter taper delta, fully inserted", p.tenon_delta(p.profile_thk), +0.0250)
+print("taper endpoints bracket nominal - half of the 0.045\" default range")
+check("tenon delta, bearing flush", s.tenon_delta(0.0), -0.0225)
+check("tenon delta, fully inserted", s.tenon_delta(s.profile_thk), +0.0225)
 
-print("pantorouter mismatched bit - 1/4\" bit, 1/2\" mortise")
-pm = Spec(
-    bit_dia=0.25,
-    tenon_width=0.5,
-    tenon_length=2.0,
-    machine="pantorouter",
-    stylus_dia=0.8661,
-    taper_range=0.050,
-    profile_thk=0.500,
-)
-check("pantorouter profile width at nominal", pm.prof_wid_nom, 0.6339, tol=1e-4)
-check("pantorouter profile length at nominal", pm.prof_len_nom, 3.6339, tol=1e-4)
-check("pantorouter tenon end radius follows the mortise", pm.tenon_width / 2, 0.2500)
+print("mortise slot - travel is what the stop collars are set against")
+ms = Spec(bit_dia=0.5, tenon_width=0.5, tenon_length=2.0, mortise_slot=True)
+# A pin of diameter d in a stadium slot travels (slot_len - d) end to end,
+# whatever the slot's width, and that travel has to equal the bit's.
+check("slot travel = tenon length - tenon width", ms.slot_travel, 1.5000)
+check("pin travel end to end", ms.slot_len - ms.pin_dia, 1.5000)
+check("slot width = pin + clearance", ms.slot_wid, 0.1920 + 0.008)
+check("slot sunk through the profile only", ms.slot_depth, 0.2500)
+check("slot leaves wall in the profile", ms.slot_wall_side, 0.2013, tol=1e-3)
+assert ms.ok, ms.errors
 
-print("taper endpoints bracket nominal")
-check("tenon delta, bearing flush", s.tenon_delta(0.0), -0.020)
-check("tenon delta, fully inserted", s.tenon_delta(s.profile_thk), +0.020)
+# The mortise must come out the length of the tenon it mates with: the bit is
+# tenon_width across, so its centre travels the slot's travel.
+check("mortise length the slot produces", ms.slot_travel + ms.tenon_width, 2.0000)
+
+print("mortise slot - refuses to eat the guide profile")
+narrow = Spec(bit_dia=0.2, tenon_width=0.5, tenon_length=2.0, mortise_slot=True)
+if any("mortise slot" in e.lower() for e in narrow.errors):
+    print("  ok    rejected a slot that would leave no wall")
+else:
+    print(f"  FAIL  accepted {narrow.slot_wall_side:.4f}\" of wall")
+    FAILURES.append("narrow slot wall")
+
+off = Spec(bit_dia=0.2, tenon_width=0.5, tenon_length=2.0)
+if not any("mortise slot" in e.lower() for e in off.errors):
+    print("  ok    same template without the slot is not blocked by it")
+else:
+    print("  FAIL  slot errors leak into an unslotted template")
+    FAILURES.append("slot error leak")
 
 print("input bounds are enforced")
 for bad in ({"bit_dia": 0}, {"tenon_width": -1}, {"taper_range": 9}):

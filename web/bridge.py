@@ -11,11 +11,17 @@ separately:
     core   the transfer function and the setup sheet. Pure arithmetic, ready
            as soon as Python boots (~2 s).
     cad    STL / STEP / 3MF / DXF. Needs build123d on top of a ~23 MB
-           WebAssembly build of OpenCascade, fetched in the background and
-           cached by the browser afterwards.
+           WebAssembly build of OpenCascade, cached by the browser afterwards.
+
+This module never brings the CAD kernel up on its own; the page asks, through
+`mrttLoadCad`, and the page owns the policy. A desktop asks as soon as the
+core is up, so the download overlaps with the user typing rather than landing
+inside their first export. A phone does not ask at all unless the user presses
+the button for it: initialising OpenCascade costs far more memory than the
+arithmetic does, and on a mobile browser it can take the tab down with it.
 
 The page is told about each through `window.MRTT`, and calls back in through
-`window.mrttCompute` / `window.mrttExport`.
+`window.mrttCompute` / `window.mrttExport` / `window.mrttLoadCad`.
 """
 
 from __future__ import annotations
@@ -38,6 +44,10 @@ FONT_URL = "./fonts/DejaVuSans.ttf"
 FONT_DEST = "/mrtt-fonts/DejaVuSans.ttf"
 
 ui = window.MRTT
+
+# Flipped once OpenCascade is up and `app.model` is importable. Until then the
+# only export this module can serve is the setup sheet, which is pure text.
+_cad_ready = False
 
 
 def _js(obj: dict):
@@ -93,6 +103,14 @@ def export(fmt: str, payload_json: str):
         blob = build_report(spec).encode("utf-8")
         name, mime = stem + ".txt", "text/plain"
     else:
+        if not _cad_ready:
+            # The page guards this too; reaching it means a stale button or a
+            # console call, and a plain sentence beats an ImportError.
+            raise RuntimeError(
+                "The CAD engine is not loaded, so solid formats are "
+                "unavailable. Load it first."
+            )
+
         from app import model
 
         if fmt not in model.FORMATS:
@@ -123,7 +141,7 @@ async def _fetch_font() -> str | None:
     return str(dest)
 
 
-async def _load_cad() -> None:
+async def _bring_up_cad() -> None:
     ui.status("Fetching the CAD kernel (~23 MB, cached after this)…")
 
     import ocp_wasm_bootstrap
@@ -142,22 +160,39 @@ async def _load_cad() -> None:
     else:
         ui.warn("Bundled font unavailable - parts will export without engraving.")
 
-    # The first solid pays for OpenCascade's own start-up. Do it here, in the
-    # background, rather than on the first click where it reads as a hang.
+    # The first solid pays for OpenCascade's own start-up. Do it while the
+    # page is still saying "starting the CAD kernel", not on the export that
+    # follows, where the same seconds read as a hang.
     warmup = spec_from_inputs(
         {"bit_dia": 0.5, "tenon_width": 0.5, "tenon_length": 2.0}
     )
     model.build_part(warmup, engrave=False)
 
 
+async def load_cad() -> bool:
+    """Bring the CAD kernel up on request. Idempotent; True once usable.
+
+    The page serialises calls, but this stays safe to call twice: a second
+    request after a successful load is a no-op, and a request after a failure
+    retries, which is what the retry button wants.
+    """
+    global _cad_ready
+    if _cad_ready:
+        return True
+
+    try:
+        await _bring_up_cad()
+    except Exception as exc:
+        traceback.print_exc()
+        ui.cadFailed(f"{type(exc).__name__}: {exc}")
+        return False
+
+    _cad_ready = True
+    ui.cadReady()
+    return True
+
+
 window.mrttCompute = compute
 window.mrttExport = export
+window.mrttLoadCad = load_cad
 ui.coreReady()
-
-try:
-    await _load_cad()  # noqa: F704 - PyScript runs this with runPythonAsync
-except Exception as exc:
-    traceback.print_exc()
-    ui.cadFailed(f"{type(exc).__name__}: {exc}")
-else:
-    ui.cadReady()

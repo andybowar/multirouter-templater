@@ -11,8 +11,6 @@ from pathlib import Path
 
 from build123d import (
     Align,
-    Circle,
-    Cylinder,
     ExportDXF,
     Mesher,
     Plane,
@@ -49,94 +47,55 @@ FONT_PATHS: list[str] = []
 
 
 def build_part(spec: Spec, engrave: bool = True):
-    """Build the template solid.
+    """Build the three-layer template as a single fused solid.
 
-    Multi-Router: Three-layer stepped solid (base plate + middle step + tapered profile).
-    PantoRouter: Direct T-slot mount template (mounting base flange with rear alignment tab,
-                 counterbored M5 mounting holes, and front tapered guide profile).
+    Layer 1 sits on z=0 (the print bed, and the face that seats in the
+    holder). The tapered guide profile points up in +Z.
     """
     base_thk = spec.base_thk * MM
+    mid_thk = spec.mid_thk * MM
     prof_thk = spec.profile_thk * MM
 
-    if spec.machine == "pantorouter":
-        # Base mounting flange
-        part = extrude(SlotOverall(spec.base_len * MM, spec.base_wid * MM), base_thk)
+    # Layer 1 - base plate, square corners.
+    part = extrude(Rectangle(spec.base_len * MM, spec.base_wid * MM), base_thk)
 
-        # Rear alignment tab (fits into the PantoRouter extrusion T-track)
-        tab_thk = spec.tab_thk * MM
-        tab_sk = Plane.XY.offset(-tab_thk) * Rectangle(spec.base_len * MM, spec.tab_wid * MM)
-        part += extrude(tab_sk, tab_thk)
+    # Engrave into the z=0 face before fusing anything else onto it: the
+    # boolean is cheaper against a plain slab.
+    if engrave:
+        pocket = _engraving_solid(spec)
+        if pocket is not None:
+            part -= pocket
 
-        # M5 clearance mounting holes with counterbores
-        hole_rad = (spec.hole_dia * MM) / 2.0
-        cbore_rad = (spec.cbore_dia * MM) / 2.0
-        cbore_depth = spec.cbore_depth * MM
-        total_depth = base_thk + tab_thk
+    # Layer 2 - middle step, stadium.
+    mid_sk = Plane.XY.offset(base_thk) * SlotOverall(
+        spec.mid_len * MM, spec.mid_wid * MM
+    )
+    part += extrude(mid_sk, mid_thk)
 
-        for sx in (-1, 1):
-            hx = sx * spec.hole_offset_x * MM
-            # Through hole
-            thru = Pos(hx, 0, -tab_thk - 0.5) * Cylinder(
-                radius=hole_rad,
-                height=total_depth + 1.0,
-                align=(Align.CENTER, Align.CENTER, Align.MIN),
-            )
-            part -= thru
-            # Counterbore on front face
-            cbore = Pos(hx, 0, base_thk - cbore_depth) * Cylinder(
-                radius=cbore_rad,
-                height=cbore_depth + 1.0,
-                align=(Align.CENTER, Align.CENTER, Align.MIN),
-            )
-            part -= cbore
+    # Layer 3 - the tapered guide profile. A ruled loft between two concentric
+    # stadiums is exactly a uniform inward offset at every height: the flats
+    # interpolate to planes, and the end arcs share a center so they
+    # interpolate to cones.
+    z0 = base_thk + mid_thk
+    bottom = Plane.XY.offset(z0) * SlotOverall(
+        spec.prof_len_base * MM, spec.prof_wid_base * MM
+    )
+    top = Plane.XY.offset(z0 + prof_thk) * SlotOverall(
+        spec.prof_len_top * MM, spec.prof_wid_top * MM
+    )
+    part += loft([bottom, top], ruled=True)
 
-        # Front tapered guide profile
-        z0 = base_thk
-        bottom = Plane.XY.offset(z0) * SlotOverall(
-            spec.prof_len_base * MM, spec.prof_wid_base * MM
+    # Optional mortise slot: the stepped pin drops in here so the table stops
+    # can be set against its travel. Sunk from the free top face to the base of
+    # the profile and no further - layers 1 and 2 are the holder interface.
+    # The cut overshoots upward only, where there is nothing left to cut.
+    if spec.mortise_slot:
+        slot_sk = Plane.XY.offset(z0) * SlotOverall(
+            spec.slot_len * MM, spec.slot_wid * MM
         )
-        top = Plane.XY.offset(z0 + prof_thk) * SlotOverall(
-            spec.prof_len_top * MM, spec.prof_wid_top * MM
-        )
-        part += loft([bottom, top], ruled=True)
+        part -= extrude(slot_sk, spec.slot_depth * MM + 1.0)
 
-        if engrave:
-            pocket = _engraving_solid(spec)
-            if pocket is not None:
-                part -= pocket
-
-        return part
-
-    else:
-        mid_thk = spec.mid_thk * MM
-
-        # Layer 1 - base plate, square corners.
-        part = extrude(Rectangle(spec.base_len * MM, spec.base_wid * MM), base_thk)
-
-        # Engrave into the z=0 face before fusing anything else onto it: the
-        # boolean is cheaper against a plain slab.
-        if engrave:
-            pocket = _engraving_solid(spec)
-            if pocket is not None:
-                part -= pocket
-
-        # Layer 2 - middle step, stadium.
-        mid_sk = Plane.XY.offset(base_thk) * SlotOverall(
-            spec.mid_len * MM, spec.mid_wid * MM
-        )
-        part += extrude(mid_sk, mid_thk)
-
-        # Layer 3 - the tapered guide profile.
-        z0 = base_thk + mid_thk
-        bottom = Plane.XY.offset(z0) * SlotOverall(
-            spec.prof_len_base * MM, spec.prof_wid_base * MM
-        )
-        top = Plane.XY.offset(z0 + prof_thk) * SlotOverall(
-            spec.prof_len_top * MM, spec.prof_wid_top * MM
-        )
-        part += loft([bottom, top], ruled=True)
-
-        return part
+    return part
 
 
 # ---------------------------------------------------------------------------
@@ -145,17 +104,11 @@ def build_part(spec: Spec, engrave: bool = True):
 
 
 def engraving_lines(spec: Spec) -> list[str]:
-    """Just the facts you need to pick the right template off the shelf."""
-    lines = []
-    if spec.machine == "pantorouter":
-        lines.append("PANTOROUTER 2:1")
-    lines.extend(
-        [
-            f"ROUTER BIT {spec.bit_dia:.3f}",
-            f"TENON SIZE {spec.tenon_width:.3f} x {spec.tenon_length:.3f}",
-        ]
-    )
-    return lines
+    """Just the two facts you need to pick the right template off the shelf."""
+    return [
+        f"ROUTER BIT {spec.bit_dia:.3f}",
+        f"TENON SIZE {spec.tenon_width:.3f} x {spec.tenon_length:.3f}",
+    ]
 
 
 def _text_sketch(spec: Spec) -> Sketch | None:
@@ -284,41 +237,25 @@ def _export_dxf(spec: Spec, path: Path) -> None:
     """Flat outlines for reference / laser work / CAD tracing."""
     exporter = ExportDXF(unit=Unit.MM)
 
-    if spec.machine == "pantorouter":
-        layers = [
-            ("mounting_base", SlotOverall(spec.base_len * MM, spec.base_wid * MM)),
-            ("alignment_tab", Rectangle(spec.base_len * MM, spec.tab_wid * MM)),
-            (
-                "mounting_holes",
-                Pos(-spec.hole_offset_x * MM, 0) * Circle(spec.hole_dia * MM / 2.0)
-                + Pos(spec.hole_offset_x * MM, 0) * Circle(spec.hole_dia * MM / 2.0),
-            ),
-            (
-                "profile_base",
-                SlotOverall(spec.prof_len_base * MM, spec.prof_wid_base * MM),
-            ),
-            (
-                "profile_nominal",
-                SlotOverall(spec.prof_len_nom * MM, spec.prof_wid_nom * MM),
-            ),
-            ("profile_top", SlotOverall(spec.prof_len_top * MM, spec.prof_wid_top * MM)),
-            ("tenon_nominal", SlotOverall(spec.tenon_length * MM, spec.tenon_width * MM)),
-        ]
-    else:
-        layers = [
-            ("base_plate", Rectangle(spec.base_len * MM, spec.base_wid * MM)),
-            ("middle_step", SlotOverall(spec.mid_len * MM, spec.mid_wid * MM)),
-            (
-                "profile_base",
-                SlotOverall(spec.prof_len_base * MM, spec.prof_wid_base * MM),
-            ),
-            (
-                "profile_nominal",
-                SlotOverall(spec.prof_len_nom * MM, spec.prof_wid_nom * MM),
-            ),
-            ("profile_top", SlotOverall(spec.prof_len_top * MM, spec.prof_wid_top * MM)),
-            ("tenon_nominal", SlotOverall(spec.tenon_length * MM, spec.tenon_width * MM)),
-        ]
+    layers = [
+        ("base_plate", Rectangle(spec.base_len * MM, spec.base_wid * MM)),
+        ("middle_step", SlotOverall(spec.mid_len * MM, spec.mid_wid * MM)),
+        (
+            "profile_base",
+            SlotOverall(spec.prof_len_base * MM, spec.prof_wid_base * MM),
+        ),
+        (
+            "profile_nominal",
+            SlotOverall(spec.prof_len_nom * MM, spec.prof_wid_nom * MM),
+        ),
+        ("profile_top", SlotOverall(spec.prof_len_top * MM, spec.prof_wid_top * MM)),
+        ("tenon_nominal", SlotOverall(spec.tenon_length * MM, spec.tenon_width * MM)),
+    ]
+
+    if spec.mortise_slot:
+        layers.append(
+            ("mortise_slot", SlotOverall(spec.slot_len * MM, spec.slot_wid * MM))
+        )
 
     for name, sketch in layers:
         exporter.add_layer(name)
