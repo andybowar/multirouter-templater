@@ -52,7 +52,7 @@ PROFILE_THK = 0.25
 
 # Total change in a tenon dimension from the base of the profile to its free
 # top face. Nominal sits at mid-depth, so the usable range is +/- half of this.
-TAPER_RANGE = 0.020
+TAPER_RANGE = 0.040
 
 # Engraved text on the base plate's back face. Recessed, never embossed - that
 # face seats in the holder.

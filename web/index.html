@@ -194,7 +194,7 @@
           </div>
           <div class="field">
             <label for="taper">Taper range (total, base to top)</label>
-            <input type="text" id="taper" value="0.020" class="num" autocomplete="off">
+            <input type="text" id="taper" value="0.040" class="num" autocomplete="off">
           </div>
           <div class="field">
             <label for="pthk">Guide profile depth</label>
@@ -518,7 +518,7 @@ function drawPlan(d) {
     path(stadium(cx, cy, d.tenon_length, d.tenon_width, s), GRN, "2 3", 1.5),
   ];
 
-  // Base, top and tenon land within ~0.020" of each other, so the three
+  // Base, top and tenon land within ~0.040" of each other, so the three
   // dimension lines look nearly identical - the labels carry the meaning.
   // Smallest sits closest to the part, which also keeps the ordering correct
   // when a sub-stylus bit makes the template smaller than the tenon.

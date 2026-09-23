@@ -106,7 +106,7 @@ silently** — the project brief explicitly required that.
 | layer 1 | 3.500 × 1.000 × 0.250" | factory template, rectangle |
 | layer 2 | 3.250 × 0.750 × 0.125" | factory template, stadium |
 | layer 3 | 0.250" thick | design decision — hosts the taper |
-| `TAPER_RANGE` | 0.020" total | design decision |
+| `TAPER_RANGE` | 0.040" total | design decision |
 
 Layers 1 and 2 are the holder interface and are **fixed**. Only layer 3 is
 computed. Overall thickness is 0.625"; the factory template is 0.500".
