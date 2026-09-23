@@ -39,8 +39,8 @@ check("profile length at nominal", m.prof_len_nom, 1.8750)
 check("tenon end radius follows the mortise", m.tenon_width / 2, 0.2500)
 
 print("taper endpoints bracket nominal")
-check("tenon delta, bearing flush", s.tenon_delta(0.0), -0.010)
-check("tenon delta, fully inserted", s.tenon_delta(s.profile_thk), +0.010)
+check("tenon delta, bearing flush", s.tenon_delta(0.0), -0.020)
+check("tenon delta, fully inserted", s.tenon_delta(s.profile_thk), +0.020)
 
 print("input bounds are enforced")
 for bad in ({"bit_dia": 0}, {"tenon_width": -1}, {"taper_range": 9}):
