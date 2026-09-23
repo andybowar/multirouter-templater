@@ -141,11 +141,93 @@ async def _fetch_font() -> str | None:
     return str(dest)
 
 
+# build123d imports these two at module scope, so they cannot simply be left
+# out - but it only *uses* them for material appearance, which this app never
+# touches. `threejs_materials` is an 87.7 MB wheel of texture tooling, nearly
+# four times the OpenCascade build it rides in with, and micropip would fetch
+# it on every cold start.
+#
+# So they are registered as already-installed mock packages before the
+# bootstrap runs, satisfying the resolver, and the stub modules below supply
+# the four names build123d actually imports:
+#
+#   bd_materials.FinishedMaterial   isinstance checks, and annotations that
+#                                   are lazy in all three importers
+#   bd_materials.resolve            only called when assigning a material
+#   threejs_materials.PbrProperties isinstance checks only
+#   threejs_materials.inject_materials  only reached inside export_gltf, and
+#                                   only for nodes that carry PBR materials
+#
+# Nothing here is exercised unless someone gives a Shape a material or exports
+# glTF. If build123d ever starts using these for real, the guards raise with a
+# pointer back here rather than failing somewhere confusing.
+#
+# The distribution names below are the CANONICAL, hyphenated ones.
+# `add_mock_package` stores whatever string it is given, verbatim, while the
+# resolver looks the requirement up canonicalised - so registering
+# "bd_materials" satisfies nothing and the wheel is fetched anyway. Verified
+# under real Pyodide: hyphens satisfy, underscores do not. The module names
+# inside keep their underscores, because that is what build123d imports.
+_MATERIAL_STUBS: dict[str, tuple[str, str, str]] = {
+    "bd-materials": (
+        "bd_materials",
+        "0.2.4",
+        '''"""Stub. See _MATERIAL_STUBS in bridge.py."""
+
+
+class FinishedMaterial:  # isinstance target; never instantiated here
+    pass
+
+
+def resolve(*args, **kwargs):
+    raise RuntimeError(
+        "bd_materials is stubbed out in this build - see _MATERIAL_STUBS "
+        "in bridge.py. Materials are not supported in the browser app."
+    )
+''',
+    ),
+    "threejs-materials": (
+        "threejs_materials",
+        "1.2.3",
+        '''"""Stub. See _MATERIAL_STUBS in bridge.py."""
+
+
+class PbrProperties:  # isinstance target; never instantiated here
+    pass
+
+
+def inject_materials(*args, **kwargs):
+    raise RuntimeError(
+        "threejs_materials is stubbed out in this build - see _MATERIAL_STUBS "
+        "in bridge.py. Only reachable from export_gltf, which this app does "
+        "not use."
+    )
+''',
+    ),
+}
+
+
+def _stub_material_packages() -> None:
+    """Tell micropip the material packages are already here. Best effort.
+
+    If this fails the only cost is the download it was avoiding, so it must
+    never be allowed to take the CAD kernel down with it.
+    """
+    try:
+        import micropip
+
+        for dist, (module, version, source) in _MATERIAL_STUBS.items():
+            micropip.add_mock_package(dist, version, modules={module: source})
+    except Exception:
+        traceback.print_exc()
+
+
 async def _bring_up_cad() -> None:
     ui.status("Fetching the CAD kernel (~23 MB, cached after this)…")
 
     import ocp_wasm_bootstrap
 
+    _stub_material_packages()
     await ocp_wasm_bootstrap.bootstrap()
 
     ui.status("Starting the CAD kernel…")

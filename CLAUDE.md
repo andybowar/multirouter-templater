@@ -252,6 +252,17 @@ is the only conversion point — keep it that way.
   the geometry under you.
 - **Sectioning exactly at a layer interface** picks up the wrong layer. Offset
   by a small epsilon when verifying cross-sections.
+- **build123d drags in 88 MB of material tooling.** It imports `bd_materials`
+  and `threejs_materials` at module scope, so they cannot be dropped — but it
+  only uses them for appearance, which this app never sets.
+  `_MATERIAL_STUBS` in `bridge.py` registers both as mock packages before the
+  bootstrap runs and supplies the four names build123d imports. Cold start went
+  from 147 MB to 60 MB; STL and STEP come out byte-identical.
+  **The distribution names must be canonical (hyphenated).**
+  `micropip.add_mock_package` stores the string verbatim while the resolver
+  looks requirements up canonicalised, so `"bd_materials"` silently satisfies
+  nothing and the wheel is fetched anyway — which is exactly the bug the first
+  attempt shipped. Module names inside keep underscores.
 - **The phone `@media` block must stay last in the stylesheet.** A media query
   carries no extra specificity, so it beats a base rule only by coming after
   it. The block was written near the top and nearly every override in it —
