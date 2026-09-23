@@ -56,7 +56,7 @@ The inputs:
 | **Tenon width** | The mortise width — i.e. the bit you cut the *mortise* with |
 | **Tenon length** | The long dimension of the tenon |
 | **Router bit diameter for tenon cut** | The bit you'll cut the *tenon* with. Need not match the mortising bit |
-| **Add mortise slot** | Optional. Cuts a stop-collar slot for the stepped end of the stylus pin — see below |
+| **Add mortise slot** | Optional. Cuts a guide slot for the stepped end of the stylus pin, so the same template cuts the mortise — see below |
 
 Tenon *depth* — how far it protrudes from the shoulder — is your plunge
 setting, not template geometry, so it isn't an input.
@@ -67,6 +67,23 @@ diameters, not nominal.
 Then download **STL** or **3MF** for the slicer, **STEP** for Fusion 360, or
 **DXF** for flat outlines. The **setup sheet** is a printable text file with
 the dimensions, the adjustment table and print settings.
+
+## Checking it before you print
+
+**Render 3D preview** shows the part in the page — orbit it, zoom it, and jump
+straight to the engraved face. It renders the *exact STL the download button
+gives you*, not a second model drawn from the same numbers, so what you see is
+what the slicer gets.
+
+Mostly it is there to catch the engraving: that face sits on the print bed, so
+the text is mirrored in the model on purpose, and "on purpose" is hard to
+believe until you have looked at it. It also shows the mortise slot and which
+way the taper runs.
+
+It needs the CAD engine, so it follows the same rules as the 3D exports —
+ready when the kernel has loaded on desktop, and an explicit opt-in on a phone.
+The viewer itself is a pinned copy of three.js, about 430 KB, fetched only the
+first time you open the preview.
 
 ## On a phone
 

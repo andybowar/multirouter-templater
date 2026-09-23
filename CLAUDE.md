@@ -249,7 +249,10 @@ is the only conversion point — keep it that way.
 - **Pin OCP.wasm.** `web/vendor/ocp_wasm_bootstrap.py` carries a pinned
   `OCP_WASM_VERSION`. It is third-party, it installs a patched `cadquery-ocp`
   from a GitHub release, and floating it would let a stranger's build change
-  the geometry under you.
+  the geometry under you. **three.js is pinned for the same reason** — see
+  `web/vendor/three/README.md`.
+- **The import map must precede every module script**, PyScript's included.
+  The vendored three.js example modules import the bare specifier `three`.
 - **Sectioning exactly at a layer interface** picks up the wrong layer. Offset
   by a small epsilon when verifying cross-sections.
 - **The phone `@media` block must stay last in the stylesheet.** A media query
@@ -310,6 +313,12 @@ The rules that keep this true:
 
 The setup sheet is level 1: it is text from `app.report`, exports with no
 kernel at all, and must stay that way.
+
+The **3D preview** is level 2/3: it renders the bytes `mrttExport("stl", …)`
+returns, so it needs the kernel, and three.js is imported only on first use.
+Feeding it anything other than the exported bytes would defeat the point — the
+value is that what is on screen is what gets printed *by construction*, which
+is how the mirrored engraving gets checked before a print rather than after.
 
 ## Why the loft is exact
 
@@ -394,7 +403,7 @@ web/index.html    the UI: inputs, SVG previews, tables. Plain JS, no framework.
 web/bridge.py     what the page calls into. Exposes compute/export/loadCad on
                   window. Never starts the CAD kernel on its own.
 web/pyscript.toml which files land in Pyodide's filesystem.
-web/vendor/       pinned OCP.wasm bootstrap (third party).
+web/vendor/       pinned OCP.wasm bootstrap and three.js (third party).
 web/fonts/        DejaVu Sans, for engraving in a browser with no fonts.
 
 tools/build_site.py     web/ + app/ -> _site/. Also serves it (--serve).
