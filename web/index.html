@@ -149,8 +149,8 @@
 <body>
 
 <header>
-  <h1>JDS Multi-Router &mdash; Tapered Tenon Template Generator</h1>
-  <p>Parametric Woodpeckers-compatible templates with a PantoRouter-style taper for fit adjustment.</p>
+  <h1 id="appTitle">JDS Multi-Router &mdash; Tapered Tenon Template Generator</h1>
+  <p id="appSubtitle">Parametric templates with a tapered guide profile for precision fit adjustment.</p>
 </header>
 
 <div id="boot" role="status"><span class="spinner"></span><span id="bootText">Starting Python&hellip;</span></div>
@@ -159,7 +159,16 @@
   <!-- ---------------------------------------------------------------- -->
   <div>
     <div class="panel">
-      <h2>Tenon Parameters</h2>
+      <h2>Template Parameters</h2>
+
+      <div class="field">
+        <label for="machine">Machine</label>
+        <select id="machine" style="width:100%;padding:9px 11px;font-size:15px;border:1px solid var(--line);border-radius:6px;background:#fff;font-family:inherit;color:var(--ink);">
+          <option value="multirouter" selected>Woodpeckers / JDS Multi-Router (1:1 ratio)</option>
+          <option value="pantorouter">PantoRouter (2:1 ratio)</option>
+        </select>
+        <div class="hint" id="machineHint">Multi-Router uses a direct 1:1 linkage ratio (1:1 template size).</div>
+      </div>
 
       <div class="field">
         <label for="wid">Tenon width <span style="color:var(--muted);font-weight:400">(= mortise width)</span></label>
@@ -190,6 +199,7 @@
           <div class="field">
             <label for="stylus">Stylus bearing diameter</label>
             <input type="text" id="stylus" value="0.375" class="num" autocomplete="off">
+            <div class="presets" id="stylusPresets"></div>
             <div class="hint">Measured on the machine. Every tenon depends on this 1:1.</div>
           </div>
           <div class="field">
@@ -257,7 +267,7 @@
         <div class="svg-cap">Plan view &mdash; looking down the bearing axis</div>
         <svg id="plan" viewBox="0 0 760 300"></svg>
         <div class="legend">
-          <span><i class="swatch" style="border-top-color:#9aa1a8"></i> holder interface (fixed)</span>
+          <span><i class="swatch" style="border-top-color:#9aa1a8"></i> <span id="legendHolder">holder interface (fixed)</span></span>
           <span><i class="swatch" style="border-top-color:#b4531f"></i> profile at base</span>
           <span><i class="swatch" style="border-top-color:#b4531f;border-top-style:dashed"></i> profile at top</span>
           <span><i class="swatch" style="border-top-color:#1f6b45;border-top-style:dotted"></i> resulting tenon (nominal)</span>
@@ -284,7 +294,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-const INPUTS = ["bit", "wid", "len", "stylus", "taper", "pthk"];
+const INPUTS = ["machine", "bit", "wid", "len", "stylus", "taper", "pthk"];
 let state = null;
 
 /* The two halves of the app arrive at very different times: the arithmetic as
@@ -336,18 +346,51 @@ const BIT_PRESETS = [
   ["1/4", 0.25], ["5/16", 0.3125], ["3/8", 0.375],
   ["7/16", 0.4375], ["1/2", 0.5],
 ];
+const STYLUS_PRESETS_MULTI = [
+  ["3/8\"", 0.375],
+];
+const STYLUS_PRESETS_PANTO = [
+  ["10mm", 0.3937],
+  ["15mm", 0.5906],
+  ["22mm", 0.8661],
+  ["26mm", 1.0236],
+  ["35mm", 1.3780],
+];
+
 const fmtIn = (v) => v.toFixed(4).replace(/0+$/, "").replace(/\.$/, ".0");
-[["bitPresets", "bit"], ["widPresets", "wid"]].forEach(([host, target]) => {
-  BIT_PRESETS.forEach(([label, v]) => {
+
+function initPresets() {
+  [["bitPresets", "bit"], ["widPresets", "wid"]].forEach(([host, target]) => {
+    $(host).innerHTML = "";
+    BIT_PRESETS.forEach(([label, v]) => {
+      const b = document.createElement("button");
+      b.textContent = "⌀ " + label;
+      b.onclick = () => { $(target).value = fmtIn(v); refresh(); };
+      $(host).appendChild(b);
+    });
+  });
+  updateStylusPresets();
+}
+
+function updateStylusPresets() {
+  const isPanto = $("machine").value === "pantorouter";
+  const presets = isPanto ? STYLUS_PRESETS_PANTO : STYLUS_PRESETS_MULTI;
+  const host = $("stylusPresets");
+  if (!host) return;
+  host.innerHTML = "";
+  presets.forEach(([label, v]) => {
     const b = document.createElement("button");
     b.textContent = "⌀ " + label;
-    b.onclick = () => { $(target).value = fmtIn(v); refresh(); };
-    $(host).appendChild(b);
+    b.onclick = () => { $(targetStylus).value = fmtIn(v); refresh(); };
+    host.appendChild(b);
   });
-});
+}
+const targetStylus = "stylus";
+initPresets();
 
 function payload() {
   return {
+    machine: $("machine").value,
     bit_dia: parseLen($("bit").value),
     tenon_width: parseLen($("wid").value),
     tenon_length: parseLen($("len").value),
@@ -375,7 +418,7 @@ function syncButtons() {
 async function refresh() {
   if (!coreReady) return;
   const p = payload();
-  if (Object.values(p).some((v) => typeof v === "number" && isNaN(v))) {
+  if (Object.entries(p).some(([k, v]) => k !== "machine" && typeof v === "number" && isNaN(v))) {
     $("messages").innerHTML = '<div class="msg err">Could not read one of the inputs. Use a decimal (0.500) or a fraction (1/2).</div>';
     state = null;
     syncButtons();
@@ -394,6 +437,15 @@ async function refresh() {
 function render() {
   const { ok, errors, warnings, dims: d, table, report } = state;
 
+  const isPanto = d.machine === "pantorouter";
+  $("appTitle").innerHTML = isPanto
+    ? "PantoRouter (2:1) &mdash; Tapered Tenon Template Generator"
+    : "JDS Multi-Router &mdash; Tapered Tenon Template Generator";
+  $("machineHint").textContent = isPanto
+    ? "PantoRouter uses a 2:1 pantograph linkage ratio (template is 2:1 scale)."
+    : "Multi-Router uses a direct 1:1 linkage ratio (1:1 template size).";
+  $("legendHolder").textContent = isPanto ? "T-slot mounting base" : "holder interface (fixed)";
+
   $("messages").innerHTML =
     errors.map((e) => `<div class="msg err"><strong>Cannot build:</strong> ${e}</div>`).join("") +
     warnings.map((w) => `<div class="msg warn">${w}</div>`).join("");
@@ -401,11 +453,14 @@ function render() {
   syncButtons();
 
   $("derived").innerHTML = `
+    <dt>Machine linkage</dt><dd>${d.machine_name} (${d.linkage_ratio}:1)</dd>
+    <div class="sep"></div>
     <dt>Tenon width</dt><dd>${f4(d.tenon_width)}</dd>
     <dt>Tenon length</dt><dd>${f4(d.tenon_length)}</dd>
     <dt>Tenon end radius</dt><dd>${f4(d.tenon_width / 2)}</dd>
     <div class="sep"></div>
     <dt>Router bit</dt><dd>${f4(d.bit_dia)}</dd>
+    <dt>Stylus bearing</dt><dd>${f4(d.stylus_dia)}</dd>
     <dt>Template offset</dt><dd>${sgn(d.offset)}</dd>
     <div class="sep"></div>
     <dt>Profile at base</dt><dd>${f4(d.prof_wid_base)} &times; ${f4(d.prof_len_base)}</dd>
@@ -428,7 +483,7 @@ function render() {
 
   $("ratioNote").innerHTML =
     `<strong>${f4(d.travel_per_5thou)}</strong> of bearing travel changes the tenon by 0.005&Prime;. ` +
-    `At ${ratio(d.reduction_ratio)}:1, a sloppy 0.010&Prime; error in setting the bearing is worth only ` +
+    `At ${ratio(d.reduction_ratio)}:1, a 0.010&Prime; error in setting the bearing is worth only ` +
     `${(0.01 / d.reduction_ratio).toFixed(4)}&Prime; on the tenon.`;
 
   $("report").textContent = report || "";
@@ -502,6 +557,7 @@ function dimV(y1, y2, x, xFrom, label, c) {
 const ACC = "#b4531f", GRN = "#1f6b45";
 
 function drawPlan(d) {
+  const isPanto = d.machine === "pantorouter";
   const VW = 760, VH = 300;
   const ML = 60, MR = 178, MT = 98, MB = 28;
   const s = Math.min((VW - ML - MR) / d.base_len, (VH - MT - MB) / d.base_wid);
@@ -510,13 +566,33 @@ function drawPlan(d) {
   const T = cy - (d.base_wid * s) / 2;
   const hx = (w) => (w * s) / 2;
 
-  const g = [
-    path(rect(cx, cy, d.base_len, d.base_wid, s), "#9aa1a8", "", 1.5),
-    path(stadium(cx, cy, d.mid_len, d.mid_wid, s), "#9aa1a8", "", 1.5),
-    path(stadium(cx, cy, d.prof_len_base, d.prof_wid_base, s), ACC, "", 2),
-    path(stadium(cx, cy, d.prof_len_top, d.prof_wid_top, s), ACC, "5 4", 1.5),
-    path(stadium(cx, cy, d.tenon_length, d.tenon_width, s), GRN, "2 3", 1.5),
-  ];
+  const g = [];
+  if (isPanto) {
+    // PantoRouter mounting base with rounded ends
+    g.push(path(stadium(cx, cy, d.base_len, d.base_wid, s), "#9aa1a8", "", 1.5));
+    // T-slot alignment tab (dashed lines spanning horizontally)
+    const tabH = (d.tab_wid || 0.375) * s;
+    g.push(path(`M ${cx - d.base_len * s / 2} ${cy - tabH / 2} h ${d.base_len * s} M ${cx - d.base_len * s / 2} ${cy + tabH / 2} h ${d.base_len * s}`, "#9aa1a8", "4 4", 1));
+    // M5 mounting holes with counterbores
+    const hxOffset = (d.hole_offset_x || 0) * s;
+    const holeR = ((d.hole_dia || 0.216) * s) / 2;
+    const cboreR = ((d.cbore_dia || 0.375) * s) / 2;
+    for (const sx of [-1, 1]) {
+      const hxPos = cx + sx * hxOffset;
+      g.push(`<circle cx="${hxPos}" cy="${cy}" r="${holeR}" fill="#fff" stroke="#9aa1a8" stroke-width="1.5"/>`);
+      g.push(`<circle cx="${hxPos}" cy="${cy}" r="${cboreR}" fill="none" stroke="#9aa1a8" stroke-width="1" stroke-dasharray="2 2"/>`);
+      g.push(`<text x="${hxPos}" y="${cy - cboreR - 5}" font-size="9" fill="#9aa1a8" font-family="${MONO}" text-anchor="middle">M5</text>`);
+    }
+  } else {
+    // Multi-Router 3-layer stepped base
+    g.push(path(rect(cx, cy, d.base_len, d.base_wid, s), "#9aa1a8", "", 1.5));
+    g.push(path(stadium(cx, cy, d.mid_len, d.mid_wid, s), "#9aa1a8", "", 1.5));
+  }
+
+  // Guide profile outlines and target tenon
+  g.push(path(stadium(cx, cy, d.prof_len_base, d.prof_wid_base, s), ACC, "", 2));
+  g.push(path(stadium(cx, cy, d.prof_len_top, d.prof_wid_top, s), ACC, "5 4", 1.5));
+  g.push(path(stadium(cx, cy, d.tenon_length, d.tenon_width, s), GRN, "2 3", 1.5));
 
   // Base, top and tenon land within ~0.040" of each other, so the three
   // dimension lines look nearly identical - the labels carry the meaning.
@@ -551,38 +627,74 @@ function drawPlan(d) {
 /* --- side elevation ---------------------------------------------------- */
 
 function drawSide(d) {
+  const isPanto = d.machine === "pantorouter";
   const VW = 760, VH = 210;
   const ML = 62, MR = 118, MT = 34, MB = 48;
-  const s = Math.min((VW - ML - MR) / d.base_len, (VH - MT - MB) / d.total_thk);
+  const s = Math.min((VW - ML - MR) / d.base_len, (VH - MT - MB) / (d.total_thk + (isPanto ? (d.tab_thk || 0.08) : 0)));
   const cx = ML + (VW - ML - MR) / 2;
   const base = VH - MB;
-  const y = (h) => base - h * s;
+  const y = (h) => base - (h + (isPanto ? (d.tab_thk || 0.08) : 0)) * s;
   const half = (w) => (w * s) / 2;
-  const z0 = d.base_thk + d.mid_thk;
 
-  const face = (w, h1, h2) =>
+  const face = (w, h1, h2, fill, stroke) =>
     `<path d="M ${cx - half(w)} ${y(h1)} L ${cx + half(w)} ${y(h1)} ` +
-    `L ${cx + half(w)} ${y(h2)} L ${cx - half(w)} ${y(h2)} Z" fill="#fff" ` +
-    `stroke="#9aa1a8" stroke-width="1.5"/>`;
+    `L ${cx + half(w)} ${y(h2)} L ${cx - half(w)} ${y(h2)} Z" fill="${fill || "#fff"}" ` +
+    `stroke="${stroke || "#9aa1a8"}" stroke-width="1.5"/>`;
 
-  const g = [
-    face(d.base_len, 0, d.base_thk),
-    face(d.mid_len, d.base_thk, z0),
-    `<path d="M ${cx - half(d.prof_len_base)} ${y(z0)} L ${cx + half(d.prof_len_base)} ${y(z0)} ` +
-    `L ${cx + half(d.prof_len_top)} ${y(z0 + d.profile_thk)} ` +
-    `L ${cx - half(d.prof_len_top)} ${y(z0 + d.profile_thk)} Z" ` +
-    `fill="#fdf2ea" stroke="#b4531f" stroke-width="2"/>`,
-  ];
+  const g = [];
+  if (isPanto) {
+    const tabThk = d.tab_thk || 0.08;
+    // Rear alignment tab projecting below z=0
+    g.push(face(d.base_len, -tabThk, 0, "#f3f4f6", "#9aa1a8"));
+    g.push(`<text x="${cx}" y="${y(-tabThk / 2) + 3}" font-size="9" fill="${DIM}" ` +
+           `font-family="${MONO}" text-anchor="middle">T-slot key</text>`);
+    // Base mounting flange
+    g.push(face(d.base_len, 0, d.base_thk, "#fff", "#9aa1a8"));
+    // Counterbored hole positions
+    const hxOffset = (d.hole_offset_x || 0) * s;
+    const holeR = ((d.hole_dia || 0.216) * s) / 2;
+    const cboreR = ((d.cbore_dia || 0.375) * s) / 2;
+    const cboreD = d.cbore_depth || 0.12;
+    for (const sx of [-1, 1]) {
+      const hxPos = cx + sx * hxOffset;
+      g.push(`<line x1="${hxPos - holeR}" y1="${y(-tabThk)}" x2="${hxPos - holeR}" y2="${y(d.base_thk)}" stroke="#9aa1a8" stroke-dasharray="2 2" stroke-width="1"/>`);
+      g.push(`<line x1="${hxPos + holeR}" y1="${y(-tabThk)}" x2="${hxPos + holeR}" y2="${y(d.base_thk)}" stroke="#9aa1a8" stroke-dasharray="2 2" stroke-width="1"/>`);
+      g.push(`<line x1="${hxPos - cboreR}" y1="${y(d.base_thk - cboreD)}" x2="${hxPos - cboreR}" y2="${y(d.base_thk)}" stroke="#9aa1a8" stroke-width="1"/>`);
+      g.push(`<line x1="${hxPos + cboreR}" y1="${y(d.base_thk - cboreD)}" x2="${hxPos + cboreR}" y2="${y(d.base_thk)}" stroke="#9aa1a8" stroke-width="1"/>`);
+    }
 
-  // Only the tapered profile is dimensioned here; the holder interface is
-  // fixed and documented on the setup sheet.
-  g.push(dimV(y(z0 + d.profile_thk), y(z0), cx + half(d.base_len) + 34,
-              cx + half(d.base_len), dimTxt(d.profile_thk), ACC));
+    const z0 = d.base_thk;
+    g.push(
+      `<path d="M ${cx - half(d.prof_len_base)} ${y(z0)} L ${cx + half(d.prof_len_base)} ${y(z0)} ` +
+      `L ${cx + half(d.prof_len_top)} ${y(z0 + d.profile_thk)} ` +
+      `L ${cx - half(d.prof_len_top)} ${y(z0 + d.profile_thk)} Z" ` +
+      `fill="#fdf2ea" stroke="#b4531f" stroke-width="2"/>`
+    );
 
-  g.push(`<text x="${cx + half(d.prof_len_base) + 10}" y="${y(z0 + d.profile_thk) + 2}" ` +
-         `font-size="11.5" fill="${ACC}" font-family="${MONO}">${d.draft_deg.toFixed(2)}&#176;</text>`);
-  g.push(`<text x="${cx - half(d.base_len)}" y="${y(0) + 20}" font-size="11" fill="${DIM}" ` +
-         `font-family="${MONO}">engraved face / print bed</text>`);
+    g.push(dimV(y(z0 + d.profile_thk), y(z0), cx + half(d.base_len) + 34,
+                cx + half(d.base_len), dimTxt(d.profile_thk), ACC));
+    g.push(`<text x="${cx + half(d.prof_len_base) + 10}" y="${y(z0 + d.profile_thk) + 2}" ` +
+           `font-size="11.5" fill="${ACC}" font-family="${MONO}">${d.draft_deg.toFixed(2)}&#176;</text>`);
+    g.push(`<text x="${cx - half(d.base_len)}" y="${y(0) + 32}" font-size="11" fill="${DIM}" ` +
+           `font-family="${MONO}">T-slot plate mount</text>`);
+  } else {
+    const z0 = d.base_thk + d.mid_thk;
+    g.push(face(d.base_len, 0, d.base_thk));
+    g.push(face(d.mid_len, d.base_thk, z0));
+    g.push(
+      `<path d="M ${cx - half(d.prof_len_base)} ${y(z0)} L ${cx + half(d.prof_len_base)} ${y(z0)} ` +
+      `L ${cx + half(d.prof_len_top)} ${y(z0 + d.profile_thk)} ` +
+      `L ${cx - half(d.prof_len_top)} ${y(z0 + d.profile_thk)} Z" ` +
+      `fill="#fdf2ea" stroke="#b4531f" stroke-width="2"/>`
+    );
+
+    g.push(dimV(y(z0 + d.profile_thk), y(z0), cx + half(d.base_len) + 34,
+                cx + half(d.base_len), dimTxt(d.profile_thk), ACC));
+    g.push(`<text x="${cx + half(d.prof_len_base) + 10}" y="${y(z0 + d.profile_thk) + 2}" ` +
+           `font-size="11.5" fill="${ACC}" font-family="${MONO}">${d.draft_deg.toFixed(2)}&#176;</text>`);
+    g.push(`<text x="${cx - half(d.base_len)}" y="${y(0) + 20}" font-size="11" fill="${DIM}" ` +
+           `font-family="${MONO}">engraved face / print bed</text>`);
+  }
 
   $("side").innerHTML = g.join("");
 }
@@ -618,6 +730,20 @@ INPUTS.forEach((id) => $(id).addEventListener("input", () => {
   clearTimeout(timer);
   timer = setTimeout(refresh, 220);
 }));
+$("machine").addEventListener("change", () => {
+  const isPanto = $("machine").value === "pantorouter";
+  if (isPanto) {
+    $("stylus").value = "0.8661";
+    $("taper").value = "0.050";
+    $("pthk").value = "0.500";
+  } else {
+    $("stylus").value = "0.375";
+    $("taper").value = "0.040";
+    $("pthk").value = "0.250";
+  }
+  updateStylusPresets();
+  refresh();
+});
 $("engrave").addEventListener("change", refresh);
 </script>
 

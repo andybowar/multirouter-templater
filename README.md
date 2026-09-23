@@ -1,10 +1,8 @@
-# Multi-Router Tapered Tenon Template Generator
+# Multi-Router & PantoRouter Tapered Tenon Template Generator
 
-Generates 3D-printable tenon templates for a **JDS Multi-Router**, compatible
-with the factory template holder, with a PantoRouter-style taper so you can
-sneak up on a joint fit instead of printing a new template every time.
+Generates 3D-printable tenon templates for the **JDS / Woodpeckers Multi-Router** (1:1 linkage) and the **PantoRouter** (2:1 pantograph linkage), featuring a tapered guide profile so you can sneak up on a joint fit instead of printing a new template every time.
 
-It is a static web page. Open it, type a tenon, download a file — there is no
+It is a static web page. Open it, select your machine, type a tenon, download a file — there is no
 server, no account, and nothing you type leaves the tab. The geometry, the CAD
 kernel and the exporters are Python compiled to WebAssembly, running in the
 browser via [PyScript](https://pyscript.net).
@@ -47,10 +45,11 @@ implementation to keep in step.
 
 ## Using it
 
-Three inputs:
+Key inputs:
 
 | Input | What it is |
 |---|---|
+| **Machine** | Multi-Router (1:1 ratio) or PantoRouter (2:1 ratio) |
 | **Tenon width** | The mortise width — i.e. the bit you cut the *mortise* with |
 | **Tenon length** | The long dimension of the tenon |
 | **Router bit diameter** | The bit you'll cut the *tenon* with. Need not match the mortising bit |
@@ -89,22 +88,29 @@ tight, back the bearing out; loose, push it in.
 
 Cut a test tenon, try it, move the bearing, cut again.
 
-## The part
+## The parts & holder interfaces
 
-Three layers. The bottom two match the factory template and are fixed; only the
-tapered guide profile is computed.
+### Multi-Router (1:1)
+Three-layer stepped solid designed to clamp into the Multi-Router fixture bed. The bottom two layers match the factory template:
 
 | Layer | Size | Thickness |
 |---|---|---|
-| base plate | 3.500 × 1.000" | 0.250" |
-| middle step | 3.250 × 0.750" | 0.125" |
-| guide profile | computed | 0.250" |
+| base plate | 3.500 × 1.000" | 0.250" (square corners) |
+| middle step | 3.250 × 0.750" | 0.125" (stadium) |
+| guide profile | computed (1:1) | 0.250" (~4.57° draft) |
 
-Overall 0.625", against 0.500" for the factory template — the guide profile is
-thicker to make room for the taper.
+### PantoRouter (2:1)
+Direct T-slot mounted template designed for the extruded aluminum template holder:
 
-The back face is engraved with the router bit size and the resulting tenon
-size, so you can identify a template on the shelf.
+| Feature | Dimension | Function |
+|---|---|---|
+| base mounting flange | adaptive × 2.000" | 0.200" thick base with rounded ends |
+| rear alignment key | 0.375" wide × 0.080" high | Indexes into the template holder T-slot track |
+| mounting holes | 2× ⌀ 0.216" (M5 clearance) | ⌀ 0.375" counterbores for M5 screws & T-nuts |
+| guide profile | computed (2:1 scale) | 0.500" thick (5.71° draft, matching 5°–6° factory templates) |
+| standard stylus | 22 mm (0.866") | Standard tenon guide bearing (10, 15, 22, 26, 35 mm set) |
+
+The back/base face is engraved with the machine name, router bit size and resulting tenon size.
 
 ## Printing
 

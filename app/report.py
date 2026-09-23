@@ -11,8 +11,15 @@ def build_report(spec: Spec) -> str:
     lines: list[str] = []
     w = lines.append
 
+    is_panto = d.machine == "pantorouter"
+    title = (
+        "PANTOROUTER (2:1) - TAPERED TENON TEMPLATE"
+        if is_panto
+        else "JDS MULTI-ROUTER - TAPERED TENON TEMPLATE"
+    )
+
     w("=" * 68)
-    w("  JDS MULTI-ROUTER - TAPERED TENON TEMPLATE")
+    w(f"  {title}")
     w("=" * 68)
     w("")
     w("TARGET TENON")
@@ -32,13 +39,19 @@ def build_report(spec: Spec) -> str:
     w("")
     w("MACHINE CONSTANTS USED")
     w(f'  Stylus bearing diameter  {d.stylus_dia:.4f}"')
-    w("  Linkage ratio            1:1 (stylus travel = bit travel)")
+    if is_panto:
+        w("  Linkage ratio            2:1 (stylus travel = 2 x bit travel)")
+    else:
+        w("  Linkage ratio            1:1 (stylus travel = bit travel)")
     w("  Bearing form             flush with the rod, same diameter, no stud")
     w("")
-    w("  Transfer function:  template_dim = tenon_dim + (bit_dia - stylus_dia)")
-    w(f'                      offset per dimension = {d.offset:+.4f}"')
+    if is_panto:
+        w("  Transfer function:  template_dim = 2 * (tenon_dim + bit_dia) - stylus_dia")
+    else:
+        w("  Transfer function:  template_dim = tenon_dim + (bit_dia - stylus_dia)")
+        w(f'                      offset per dimension = {d.offset:+.4f}"')
     w("")
-    w("GUIDE PROFILE (layer 3)")
+    w("GUIDE PROFILE")
     w(f'  Depth                    {d.profile_thk:.4f}"')
     w(f'  Draft angle              {d.draft_deg:.2f} deg per side, tapering inward toward the top')
     w("")
@@ -47,11 +60,19 @@ def build_report(spec: Spec) -> str:
     w(f'  At the free top face     {d.prof_wid_top:.4f}" x {d.prof_len_top:.4f}"')
     w(f'  End radius at nominal    {d.prof_wid_nom / 2:.4f}"')
     w("")
-    w("HOLDER INTERFACE (fixed - matches the factory template)")
-    w(f'  Layer 1  base plate      {C.BASE_LEN:.3f}" x {C.BASE_WID:.3f}" x {C.BASE_THK:.3f}" thick, square corners')
-    w(f'  Layer 2  middle step     {C.MID_LEN:.3f}" x {C.MID_WID:.3f}" x {C.MID_THK:.3f}" thick, stadium')
-    w(f'  Layer 3  guide profile   see above, {d.profile_thk:.3f}" thick')
-    w(f'  Overall thickness        {d.total_thk:.3f}"')
+    if is_panto:
+        w("HOLDER INTERFACE (PantoRouter T-slot extrusion mount)")
+        w(f'  Mounting base flange     {d.base_len:.3f}" x {d.base_wid:.3f}" x {d.base_thk:.3f}" thick, stadium ends')
+        w(f'  Rear alignment key       {d.base_len:.3f}" x {d.tab_wid:.3f}" x {d.tab_thk:.3f}" high (indexes in T-track)')
+        w(f'  Mounting holes           2x ⌀ {d.hole_dia:.3f}" clearance with ⌀ {d.cbore_dia:.3f}" counterbore for M5 screws')
+        w(f'  Guide profile            see above, {d.profile_thk:.3f}" thick ({d.draft_deg:.2f} deg draft)')
+        w(f'  Overall thickness        {d.total_thk:.3f}"')
+    else:
+        w("HOLDER INTERFACE (Multi-Router slide-in fixture plate)")
+        w(f'  Layer 1  base plate      {d.base_len:.3f}" x {d.base_wid:.3f}" x {d.base_thk:.3f}" thick, square corners')
+        w(f'  Layer 2  middle step     {d.mid_len:.3f}" x {d.mid_wid:.3f}" x {d.mid_thk:.3f}" thick, stadium')
+        w(f'  Layer 3  guide profile   see above, {d.profile_thk:.3f}" thick')
+        w(f'  Overall thickness        {d.total_thk:.3f}"')
     w("")
     w("FIT ADJUSTMENT")
     w("")
