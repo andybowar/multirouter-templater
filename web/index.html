@@ -37,42 +37,15 @@
     max-width: 1180px; margin: 0 auto; padding: 24px 28px 64px;
     display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start;
   }
+  /* A grid item's automatic minimum size is its content's min-content width,
+     and `1fr` is minmax(auto, 1fr) - so the setup sheet, 68 columns of
+     monospace, was widening the whole column and pushing the page sideways.
+     The <pre> is a scroll container but it is not itself the grid item, so its
+     min-content still propagates up. min-width:0 lets the track shrink and
+     leaves the <pre> to scroll on its own. Empty until Python renders into it,
+     which is why this only appeared once the page had loaded. */
+  main > div { min-width: 0; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-
-  /* Phones. The 28px gutters alone cost 15% of a 375px screen, and every tap
-     target here was sized for a mouse. Preview type is scaled in JS instead -
-     it lives in viewBox units, so CSS cannot reach it without breaking the
-     dimension stacks. */
-  @media (max-width: 700px) {
-    header { padding: 14px 16px; }
-    header h1 { font-size: 16px; }
-    #boot { padding: 9px 16px; }
-    main { padding: 16px 16px 48px; gap: 16px; }
-    footer { padding: 0 16px 40px; }
-    .panel { padding: 16px 14px; }
-    .panel + .panel { margin-top: 14px; }
-
-    /* Touch targets: 24px-tall preset chips are a mouse affordance. */
-    .presets { gap: 8px; }
-    .presets button { padding: 9px 13px; font-size: 13px; }
-    .exports { gap: 8px; }
-    .exports button { padding: 13px 16px; flex: 1 1 auto; }
-    .cad-note button { padding: 12px 16px; width: 100%; }
-    .check input { width: 20px; height: 20px; }
-    details.adv summary { padding: 6px 0; }
-
-    /* Four columns of tabular numbers do not fit in 343px at 13px. */
-    table { font-size: 12px; }
-    th { padding: 0 5px 8px; font-size: 10px; letter-spacing: 0.03em; }
-    td { padding: 8px 5px; }
-
-    /* The derived list is a two-column grid of long labels and long values. */
-    .derived { font-size: 12px; gap: 6px 10px; }
-
-    /* 68 columns of monospace will not fit any phone; let it scroll on its
-       own rather than dragging the page sideways with it. */
-    pre.report { font-size: 10px; padding: 12px; }
-  }
 
   #boot {
     padding: 9px 28px; font-size: 13px; background: var(--accent-soft);
@@ -89,6 +62,35 @@
   }
   #boot.err .spinner, #boot.warn .spinner { display: none; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  .howto { max-width: 1180px; margin: 20px auto -6px; padding: 0 28px; }
+  .howto > summary {
+    cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; color: var(--accent);
+    background: var(--accent-soft); border: 1px solid #f0d9c6;
+    border-radius: 6px; padding: 9px 14px;
+  }
+  .howto > summary::-webkit-details-marker { display: none; }
+  .howto > summary::before { content: "▸"; font-size: 11px; }
+  .howto[open] > summary::before { content: "▾"; }
+  .howto .body {
+    margin-top: 12px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 20px 22px;
+    /* min() so a 320px phone gets a column that fits rather than a 290px
+       track that overflows by two pixels. */
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(min(290px, 100%), 1fr));
+    gap: 22px 30px;
+  }
+  .howto h3 {
+    margin: 0 0 7px; font-size: 12px; font-weight: 700; color: var(--ink);
+    letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .howto p { margin: 0 0 7px; font-size: 13px; color: var(--muted); line-height: 1.55; }
+  .howto p:last-child { margin-bottom: 0; }
+  .howto ol { margin: 0; padding-left: 18px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .howto li { margin-bottom: 4px; }
+  .howto strong { color: var(--ink); font-weight: 600; }
+  .howto [hidden] { display: none; }
 
   .panel {
     background: var(--panel); border: 1px solid var(--line);
@@ -125,6 +127,11 @@
   .derived .sep { grid-column: 1 / -1; border-top: 1px solid var(--line); margin: 4px 0; }
   .derived .hi dd { color: var(--accent); font-weight: 600; }
 
+  /* A table will not shrink below its min-content, and four columns of
+     tabular numbers do not fit a 320px phone. Let it scroll in its own box
+     rather than widening the page. */
+  .tscroll { overflow-x: auto; }
+  th .narrow { display: none; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th {
     text-align: right; font-weight: 600; color: var(--muted); font-size: 11px;
@@ -134,6 +141,13 @@
   td { padding: 7px 10px; text-align: right; font-family: "SF Mono", ui-monospace, Menlo, monospace; border-bottom: 1px solid #eef0f1; }
   tr.nominal { background: var(--accent-soft); }
   tr.nominal td { font-weight: 600; color: var(--accent); }
+  tr.start { background: #eef5f1; }
+  tr.start td { font-weight: 600; color: var(--ok); }
+  .tag {
+    display: inline-block; margin-left: 7px; padding: 1px 6px; border-radius: 3px;
+    font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+    background: var(--ok); color: #fff; font-family: inherit; vertical-align: 1px;
+  }
 
   .msg { padding: 11px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 10px; }
   .msg.err { background: var(--err-bg); color: var(--err); border: 1px solid #f2cfcb; }
@@ -195,6 +209,52 @@
     max-width: 1180px; margin: 0 auto; padding: 0 28px 48px;
     font-size: 12px; color: var(--muted);
   }
+  /* Phones. The 28px gutters alone cost 15% of a 375px screen, and every tap
+     target here was sized for a mouse. Preview type is scaled in JS instead -
+     it lives in viewBox units, so CSS cannot reach it without breaking the
+     dimension stacks.
+
+     KEEP THIS BLOCK LAST. A media query carries no extra specificity, so it
+     only beats a base rule by coming after it. This block used to sit near the
+     top of the sheet and almost every override in it was silently dead. */
+  @media (max-width: 700px) {
+    header { padding: 14px 16px; }
+    header h1 { font-size: 16px; }
+    #boot { padding: 9px 16px; }
+    main { padding: 16px 16px 48px; gap: 16px; }
+    footer { padding: 0 16px 40px; }
+    .howto { padding: 0 16px; margin-top: 16px; }
+    .howto > summary { padding: 11px 14px; }
+    .howto .body { padding: 16px 14px; gap: 18px; }
+    .panel { padding: 16px 14px; }
+    .panel + .panel { margin-top: 14px; }
+
+    /* Touch targets: 24px-tall preset chips are a mouse affordance. */
+    .presets { gap: 8px; }
+    .presets button { padding: 9px 13px; font-size: 13px; }
+    .exports { gap: 8px; }
+    .exports button { padding: 13px 16px; flex: 1 1 auto; }
+    .cad-note button { padding: 12px 16px; width: 100%; }
+    .check input { width: 20px; height: 20px; }
+    details.adv summary { padding: 6px 0; }
+
+    /* Four columns of tabular numbers do not fit in 343px at 13px. */
+    table { font-size: 12px; }
+    th { padding: 0 4px 8px; font-size: 10px; letter-spacing: 0.03em; }
+    td { padding: 8px 4px; }
+    /* Headers, not data, were the widest thing in the table. */
+    th .wide { display: none; }
+    th .narrow { display: inline; }
+    /* Let the start tag drop under the depth instead of widening column one. */
+    .tag { margin-left: 0; margin-top: 3px; display: block; width: max-content; }
+
+    /* The derived list is a two-column grid of long labels and long values. */
+    .derived { font-size: 12px; gap: 6px 10px; }
+
+    /* 68 columns of monospace will not fit any phone; let it scroll on its
+       own rather than dragging the page sideways with it. */
+    pre.report { font-size: 10px; padding: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -205,6 +265,73 @@
 </header>
 
 <div id="boot" role="status"><span class="spinner"></span><span id="bootText">Starting Python&hellip;</span></div>
+
+<details class="howto">
+  <summary>How to use this &mdash; which bit goes where, cutting, fitting, mortising</summary>
+  <div class="body">
+
+    <section>
+      <h3>Two bits, two different jobs</h3>
+      <p><strong>Tenon width</strong> is the <em>mortise</em>. Enter the diameter of the bit
+        you will cut the mortise with: it is cut in one pass, so the mortise ends up that
+        wide with ends that radius, and the tenon has to match it.</p>
+      <p><strong>Router bit diameter</strong> is whatever is in the router while you cut the
+        <em>tenon</em>. It need not match the mortising bit &mdash; the guide profile is
+        computed for it.</p>
+      <p>So changing the router bit reshapes the guide profile. It does <em>not</em> move the
+        mortise slot, which is set by the tenon's length and width alone.</p>
+    </section>
+
+    <section>
+      <h3>Cutting the tenon</h3>
+      <ol>
+        <li>Print it engraved-face down, profile pointing up. No supports.</li>
+        <li>Seat it in the template holder.</li>
+        <li><strong>Push the bearing fully in</strong>, against the widest part of the
+          profile<span id="htStart"></span>.</li>
+        <li>Cut a tenon and try it in the mortise. It should be too fat.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h3>Dialling in the fit</h3>
+      <p>Bearing depth is measured from the template's free top face. Flush gives the
+        smallest tenon; deeper gives a bigger one.</p>
+      <p><strong>Always come down onto the fit, never up to it.</strong> Withdraw the
+        bearing a little, recut the same tenon, try it again. Repeat until it goes. A
+        tenon that is still too fat can be cut again; one that has gone under size is
+        scrap, because you cannot put wood back.</p>
+      <p>Nominal is the size you asked for, at mid-depth<span id="htNominal"></span> &mdash;
+        a reference point, not where to begin. The Fit Adjustment table below gives every
+        step.</p>
+    </section>
+
+    <section>
+      <h3>Cutting the mortise from the slot</h3>
+      <p>Only if you ticked <strong>Add mortise slot</strong>. The slot <strong>is</strong>
+        the guide &mdash; it bounds the cut in both directions, so you do not need stop
+        collars at all.</p>
+      <ol>
+        <li>Fit a bit that <strong>matches the mortise width you want</strong> &mdash; the
+          same diameter you entered as Tenon width. The slot is sized around it.</li>
+        <li>Turn the stylus around so the stepped-down pin faces the template.</li>
+        <li>Drop that pin into the slot and cut, running the pin out to the ends of the
+          slot and letting them stop you.</li>
+      </ol>
+      <p id="htSlot" hidden></p>
+    </section>
+
+    <section>
+      <h3>Before you trust the first one</h3>
+      <p>Measure across the guide profile at its base with calipers<span id="htBase"></span>.
+        Any error there transfers 1:1 to the tenon, and closing that gap is exactly what the
+        taper is for.</p>
+      <p><strong>Nothing here has cut wood yet.</strong> The math reproduces a measured
+        factory template exactly, which is a strong calibration point &mdash; not proof.</p>
+    </section>
+
+  </div>
+</details>
 
 <main>
   <!-- ---------------------------------------------------------------- -->
@@ -228,7 +355,7 @@
       </div>
 
       <div class="field">
-        <label for="bit">Router bit diameter</label>
+        <label for="bit">Router bit diameter for tenon cut</label>
         <input type="text" id="bit" value="0.500" class="num" autocomplete="off">
         <div class="presets" id="bitPresets"></div>
         <div class="hint">Need not match the mortising bit. Use the <em>measured</em>
@@ -237,9 +364,10 @@
 
       <div class="field">
         <label class="check"><input type="checkbox" id="mslot"> Add mortise slot</label>
-        <div class="hint">Cuts a slot for the stepped end of the stylus pin. Turn the stylus
-          around, drop the pin in, and run the table to each end of the slot to set your
-          stop collars &mdash; the mortise then matches this tenon.</div>
+        <div class="hint">Cuts a slot for the stepped end of the stylus pin, sized so the pin
+          riding it <em>guides</em> the mortise &mdash; no stop collars. It comes from the
+          tenon length and width, <em>not</em> the router bit, and assumes you cut the
+          mortise with a bit the width of the mortise.</div>
       </div>
 
       <details class="adv">
@@ -313,13 +441,21 @@
       <p style="margin:-4px 0 14px;font-size:13px;color:var(--muted)">
         Set the bearing depth by how far its edge sits below the template's free top face.
         Flush&nbsp;=&nbsp;0. Deeper&nbsp;=&nbsp;bigger tenon.
+        <strong style="color:var(--ink)">Start fully inserted</strong>, against the widest
+        part of the profile, and work down. The first tenon comes out fat on purpose &mdash;
+        every step from there removes wood, and you cannot put it back.
       </p>
-      <table>
-        <thead><tr>
-          <th>Bearing depth</th><th>Tenon change</th><th>Tenon W</th><th>Tenon L</th>
-        </tr></thead>
-        <tbody id="tableBody"></tbody>
-      </table>
+      <div class="tscroll">
+        <table>
+          <thead><tr>
+            <th><span class="wide">Bearing depth</span><span class="narrow">Depth</span></th>
+            <th><span class="wide">Tenon change</span><span class="narrow">Change</span></th>
+            <th><span class="wide">Tenon W</span><span class="narrow">W</span></th>
+            <th><span class="wide">Tenon L</span><span class="narrow">L</span></th>
+          </tr></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
       <p id="ratioNote" style="margin:14px 0 0;font-size:13px;color:var(--muted)"></p>
     </div>
 
@@ -607,15 +743,37 @@ function render() {
     <div class="sep"></div>
     <dt>Mortise slot</dt><dd>${f4(d.slot_wid)} &times; ${f4(d.slot_len)}</dd>
     <dt>Slot depth</dt><dd>${f4(d.slot_depth)}</dd>
-    <dt>Stop-collar travel</dt><dd>${f4(d.slot_travel)}</dd>
-    <dt>Wall beside slot</dt><dd>${f4(d.slot_wall_side)}</dd>
+    <dt>Pin travel</dt><dd>${f4(d.slot_travel)}</dd>
+    <dt>Wall around slot</dt><dd>${f4(d.slot_wall)}</dd>
+    <dt>Mortise it cuts</dt><dd>${f4(d.mortise_wid)} &times; ${f4(d.mortise_len)}</dd>
+    <dt>Bearing to match it</dt><dd>${f4(d.slot_match_depth)}</dd>
   ` : "");
 
   $("slotLegend").hidden = !d.mortise_slot;
 
+  /* The how-to quotes live figures rather than hard-coding them. Every number
+     in there moves with the taper range or the profile depth, and this repo
+     has already been bitten once by prose that stopped matching the code. */
+  $("htStart").innerHTML =
+    ` &mdash; ${f4(d.profile_thk)} of bearing depth, which cuts ` +
+    `${f4(d.tenon_width + d.taper_range / 2)} &times; ${f4(d.tenon_length + d.taper_range / 2)}`;
+  $("htNominal").textContent = `, ${f4(d.profile_thk / 2)} in`;
+  $("htBase").innerHTML =
+    `; it should read ${f4(d.prof_wid_base)} &times; ${f4(d.prof_len_base)}`;
+  $("htSlot").hidden = !d.mortise_slot;
+  if (d.mortise_slot) {
+    $("htSlot").innerHTML =
+      `At these settings it cuts a <strong>${f4(d.mortise_wid)} &times; ` +
+      `${f4(d.mortise_len)}</strong> mortise &mdash; ${f4(d.slot_clearance)} over the ` +
+      `tenon in both directions, which is the slot's slip fit landing in the workpiece. ` +
+      `So the tenon wants to finish near <strong>${f4(d.slot_match_depth)}</strong> of ` +
+      `bearing depth rather than the ${f4(d.profile_thk / 2)} nominal &mdash; still start ` +
+      `fully in and creep down to it.`;
+  }
+
   $("tableBody").innerHTML = table.map((r) => `
-    <tr class="${r.is_nominal ? "nominal" : ""}">
-      <td>${r.depth_label}</td>
+    <tr class="${r.is_start ? "start" : r.is_nominal ? "nominal" : ""}">
+      <td>${r.depth_label}${r.is_start ? '<span class="tag">start</span>' : ""}</td>
       <td>${r.is_nominal ? "nominal" : sgn(r.delta)}</td>
       <td>${r.tenon_width.toFixed(4)}</td>
       <td>${r.tenon_length.toFixed(4)}</td>
@@ -709,8 +867,12 @@ const ACC = "#b4531f", GRN = "#1f6b45", SLOT = "#3a5a8c";
 
 function drawPlan(d) {
   TXT = textScale();
-  const VW = 760, VH = Math.round(300 + 80 * (TXT - 1));
-  const ML = 60, MR = Math.round(178 * TXT), MT = Math.round(98 * TXT), MB = 28;
+  // The slot adds a fourth row to the length stack. Grow the viewBox by the
+  // same amount as the margin so the part itself does not shrink to pay for
+  // the extra dimension.
+  const row = d.mortise_slot ? 26 : 0;
+  const VW = 760, VH = Math.round(300 + 80 * (TXT - 1) + row * TXT);
+  const ML = 60, MR = Math.round(178 * TXT), MT = Math.round((98 + row) * TXT), MB = 28;
   $("plan").setAttribute("viewBox", `0 0 ${VW} ${VH}`);
   const s = Math.min((VW - ML - MR) / d.base_len, (VH - MT - MB) / d.base_wid);
   const cx = ML + (VW - ML - MR) / 2, cy = MT + (VH - MT - MB) / 2;
@@ -728,7 +890,7 @@ function drawPlan(d) {
 
   if (d.mortise_slot) {
     g.push(path(stadium(cx, cy, d.slot_len, d.slot_wid, s), SLOT, "", 1.5));
-    // The pin at one end of its travel, where a stop collar gets set.
+    // The pin at one end of its travel, where the slot stops the cut.
     const pinR = (d.pin_dia * s) / 2;
     g.push(`<circle cx="${cx - hx(d.slot_len - d.pin_dia)}" cy="${cy}" r="${pinR}" ` +
            `fill="none" stroke="${SLOT}" stroke-width="1" stroke-dasharray="2 2"/>`);
@@ -741,12 +903,17 @@ function drawPlan(d) {
   const stack = (vals, place) =>
     vals.slice().sort((a, b) => a.v - b.v).forEach((o, i) => place(o, i));
 
+  const lengths = [
+    { v: d.tenon_length, t: "tenon", c: GRN },
+    { v: d.prof_len_top, t: "top", c: ACC },
+    { v: d.prof_len_base, t: "base", c: ACC },
+  ];
+  // Goes through the same sort, so it lands wherever its size puts it rather
+  // than being pinned to the inside of the stack.
+  if (d.mortise_slot) lengths.push({ v: d.slot_len, t: "slot", c: SLOT });
+
   stack(
-    [
-      { v: d.tenon_length, t: "tenon", c: GRN },
-      { v: d.prof_len_top, t: "top", c: ACC },
-      { v: d.prof_len_base, t: "base", c: ACC },
-    ],
+    lengths,
     (o, i) => g.push(dimH(cx - hx(o.v), cx + hx(o.v), T - (24 + i * 26) * TXT, T,
                           `${o.t} ${dimTxt(o.v)}`, o.c)),
   );
@@ -768,8 +935,12 @@ function drawPlan(d) {
 
 function drawSide(d) {
   TXT = textScale();
-  const VW = 760, VH = Math.round(210 + 40 * (TXT - 1));
-  const ML = 62, MR = Math.round(118 * TXT), MT = 34, MB = Math.round(48 * TXT);
+  // Nothing sits above the part unless the slot is dimensioned there, so the
+  // top margin is a constant until it is. Same trick as the plan view: the
+  // viewBox absorbs the extra so the part keeps its size.
+  const MTop = d.mortise_slot ? Math.round(44 * TXT) : 34;
+  const VW = 760, VH = Math.round(210 + 40 * (TXT - 1)) + (MTop - 34);
+  const ML = 62, MR = Math.round(118 * TXT), MT = MTop, MB = Math.round(48 * TXT);
   $("side").setAttribute("viewBox", `0 0 ${VW} ${VH}`);
   const s = Math.min((VW - ML - MR) / d.base_len, (VH - MT - MB) / d.total_thk);
   const cx = ML + (VW - ML - MR) / 2;
@@ -795,12 +966,16 @@ function drawSide(d) {
   // The slot is a pocket sunk from the top face to the base of the profile,
   // so in elevation it is a notch out of the frustum, floor on z0.
   if (d.mortise_slot) {
+    const topY = y(z0 + d.profile_thk);
     g.push(
-      `<path d="M ${cx - half(d.slot_len)} ${y(z0 + d.profile_thk)} ` +
+      `<path d="M ${cx - half(d.slot_len)} ${topY} ` +
       `L ${cx - half(d.slot_len)} ${y(z0)} L ${cx + half(d.slot_len)} ${y(z0)} ` +
-      `L ${cx + half(d.slot_len)} ${y(z0 + d.profile_thk)}" ` +
+      `L ${cx + half(d.slot_len)} ${topY}" ` +
       `fill="#fff" stroke="${SLOT}" stroke-width="1.5"/>`
     );
+    // Dimensioned off the top face, which is the face the slot opens into.
+    g.push(dimH(cx - half(d.slot_len), cx + half(d.slot_len), topY - 22 * TXT, topY,
+                `slot ${dimTxt(d.slot_len)}`, SLOT));
   }
 
   // Only the tapered profile is dimensioned here; the holder interface is

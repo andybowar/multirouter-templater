@@ -55,7 +55,7 @@ The inputs:
 |---|---|
 | **Tenon width** | The mortise width — i.e. the bit you cut the *mortise* with |
 | **Tenon length** | The long dimension of the tenon |
-| **Router bit diameter** | The bit you'll cut the *tenon* with. Need not match the mortising bit |
+| **Router bit diameter for tenon cut** | The bit you'll cut the *tenon* with. Need not match the mortising bit |
 | **Add mortise slot** | Optional. Cuts a stop-collar slot for the stepped end of the stylus pin — see below |
 
 Tenon *depth* — how far it protrudes from the shoulder — is your plunge
@@ -93,40 +93,52 @@ along that taper decides the size of the tenon.
 Set the bearing depth by how far its edge sits below the template's free top
 face. Flush = 0. Deeper = bigger tenon.
 
-| Bearing depth | Tenon |
-|---|---|
-| flush | −0.0225" |
-| 1/16" | −0.01125" |
-| **1/8"** | **nominal** |
-| 3/16" | +0.01125" |
-| 1/4" | +0.0225" |
+| Bearing depth | Tenon | |
+|---|---|---|
+| flush | −0.0225" | |
+| 1/16" | −0.01125" | |
+| 1/8" | nominal | |
+| 3/16" | +0.01125" | |
+| **1/4"** | **+0.0225"** | **start here** |
+
+**Start fully inserted**, against the widest part of the profile. That is the
+biggest tenon the template can cut, so the first one comes out too fat — which
+is the point. Withdraw the bearing a little, recut the same tenon, try it
+again, and repeat until it goes.
+
+Always come down onto the fit, never up to it. A tenon that is still fat can be
+cut again; one that has gone under size is scrap, because you cannot put wood
+back. Nominal is the size you asked for, not where to begin.
 
 **0.028" of bearing travel = 0.005" of tenon.** That's a 5.6:1 reduction, so a
-sloppy 0.010" error setting the bearing is worth 0.0018" on the tenon. Nominal
-sits in the middle of the range, so you can go either way after a test cut:
-tight, back the bearing out; loose, push it in.
-
-Cut a test tenon, try it, move the bearing, cut again.
+sloppy 0.010" error setting the bearing is worth 0.0018" on the tenon.
 
 ## The mortise slot (optional)
 
 Tick **Add mortise slot** and the template gets a slot down the middle of the
 guide profile, sized for the stepped-down end of the stylus pin (0.1920" on
-this machine). It cuts nothing — it sets up the *other* half of the joint.
+this machine). It cuts the *other* half of the joint.
 
-Turn the stylus around, drop the small pin into the slot, run the table to one
-end of the slot and lock that stop collar, then the other end and lock the
-second. The mortise then comes out the length of the tenon this same template
-cuts, without measuring anything.
+Turn the stylus around so the small pin faces the template, fit a bit the width
+of the mortise you want — the same diameter you entered as tenon width — drop
+the pin into the slot and cut. **The slot is the guide**: it bounds the cut in
+both directions, so you run the pin out to the ends of the slot and let them
+stop you. No stop collars.
 
-The length is derived, not copied: the mortise is cut in one pass with a bit
-the width of the tenon, so the bit centre travels `tenon length − tenon width`,
-and the linkage is 1:1, so the pin has to travel the same. For the default
-1/2" × 2" tenon that is a 0.200" × 1.692" slot, 0.250" deep.
+The slot is derived, not copied — it is the mortise offset inward by
+`(tenon width − pin) / 2`, which for the default 1/2" × 2" tenon is a
+0.200" × 1.700" slot, 0.250" deep.
 
-The slot spends wall out of the guide profile — the part the bearing pushes
-against — so on a small bit the app will warn, and on a very small one it will
-refuse. Untick the box and you get the plain template.
+Because it guides, its slip fit lands in the work: the mortise comes out
+0.008" oversize in *both* directions. That is deliberate — the taper moves both
+tenon dimensions together, so a uniformly oversize mortise is one the tenon can
+be dialled up to meet. The page and the setup sheet tell you the bearing depth
+that does it (0.169" instead of the 0.125" nominal, on the defaults).
+
+The slot spends wall out of the guide profile — the wall the bearing rides on
+the outside and the pin rides on the inside — so on a small bit the app will
+warn, and on a very small one it will refuse. Untick the box and you get the
+plain template.
 
 ## The part
 

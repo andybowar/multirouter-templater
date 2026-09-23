@@ -42,27 +42,41 @@ print("taper endpoints bracket nominal - half of the 0.045\" default range")
 check("tenon delta, bearing flush", s.tenon_delta(0.0), -0.0225)
 check("tenon delta, fully inserted", s.tenon_delta(s.profile_thk), +0.0225)
 
-print("mortise slot - travel is what the stop collars are set against")
+print("mortise slot - the slot IS the guide, so it is the pin's swept path")
 ms = Spec(bit_dia=0.5, tenon_width=0.5, tenon_length=2.0, mortise_slot=True)
-# A pin of diameter d in a stadium slot travels (slot_len - d) end to end,
-# whatever the slot's width, and that travel has to equal the bit's.
-check("slot travel = tenon length - tenon width", ms.slot_travel, 1.5000)
-check("pin travel end to end", ms.slot_len - ms.pin_dia, 1.5000)
-check("slot width = pin + clearance", ms.slot_wid, 0.1920 + 0.008)
+CLR = ms.slot_clearance
+# slot = mortise offset inward by (tenon_width - pin_dia)/2, opened up by the
+# fit clearance uniformly.
+check("slot width = pin + clearance", ms.slot_wid, 0.1920 + CLR)
+check("slot length = (L - W) + pin + clearance", ms.slot_len, 1.5 + 0.1920 + CLR)
 check("slot sunk through the profile only", ms.slot_depth, 0.2500)
-check("slot leaves wall in the profile", ms.slot_wall_side, 0.2013, tol=1e-3)
+check("slot leaves wall in the profile", ms.slot_wall, 0.2013, tol=1e-3)
+# One wall, not two: the profile and the slot are stadiums on the same core
+# segment, so the gap is uniform and the end wall is not a separate number.
+check("profile core segment", ms.prof_len_top - ms.prof_wid_top, 1.5000)
+check("slot core segment", ms.slot_len - ms.slot_wid, 1.5000)
+check("wall at the ends equals wall at the sides",
+      (ms.prof_len_top - ms.slot_len) / 2.0, ms.slot_wall, tol=1e-12)
 assert ms.ok, ms.errors
 
-# The mortise must come out the length of the tenon it mates with: the bit is
-# tenon_width across, so its centre travels the slot's travel.
-check("mortise length the slot produces", ms.slot_travel + ms.tenon_width, 2.0000)
+# What it actually cuts: the pin roams the slot offset inward by pin/2, the bit
+# centre follows 1:1, and the mortise is that offset outward by tenon_width/2.
+check("mortise width it cuts", (ms.slot_wid - ms.pin_dia) + ms.tenon_width, 0.5 + CLR)
+check("mortise length it cuts", (ms.slot_len - ms.pin_dia) + ms.tenon_width, 2.0 + CLR)
+check("...which is what Spec reports", ms.mortise_wid, 0.5 + CLR)
+check("...and likewise", ms.mortise_len, 2.0 + CLR)
+
+# The clearance has to be UNIFORM: the taper moves both tenon dimensions by the
+# same delta, so a mortise oversize in one direction only could never be met.
+check("mortise is uniformly oversize", ms.mortise_len - 2.0, ms.mortise_wid - 0.5)
+check("bearing depth that grows the tenon to match", ms.tenon_delta(ms.slot_match_depth), CLR)
 
 print("mortise slot - refuses to eat the guide profile")
 narrow = Spec(bit_dia=0.2, tenon_width=0.5, tenon_length=2.0, mortise_slot=True)
 if any("mortise slot" in e.lower() for e in narrow.errors):
     print("  ok    rejected a slot that would leave no wall")
 else:
-    print(f"  FAIL  accepted {narrow.slot_wall_side:.4f}\" of wall")
+    print(f"  FAIL  accepted {narrow.slot_wall:.4f}\" of wall")
     FAILURES.append("narrow slot wall")
 
 off = Spec(bit_dia=0.2, tenon_width=0.5, tenon_length=2.0)

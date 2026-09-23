@@ -47,22 +47,38 @@ def build_report(spec: Spec) -> str:
     w(f'  End radius at nominal    {d.prof_wid_nom / 2:.4f}"')
     w("")
     if d.mortise_slot:
-        w("MORTISE SLOT (for the stepped end of the stylus pin)")
+        w("MORTISE SLOT (guides the cut - no stop collars needed)")
         w(f'  Slot                     {d.slot_wid:.4f}" x {d.slot_len:.4f}", stadium, '
           f'{d.slot_depth:.3f}" deep')
         w(f'  Pin                      {d.pin_dia:.4f}" - the stepped-down end of the stylus')
-        w(f'  Travel between the ends  {d.slot_travel:.4f}" = tenon length - tenon width')
-        w(f'  Wall left in the profile {d.slot_wall_side:.3f}" each side, '
-          f'{d.slot_wall_end:.3f}" each end')
+        w(f'  Pin travel               {d.slot_travel:.4f}"')
+        w(f'  Wall left in the profile {d.slot_wall:.3f}" all round - the slot and the')
+        w('                           profile are concentric stadiums, so it is uniform')
         w("")
-        w("  This end of the stylus cuts nothing. Turn the stylus around, drop")
-        w("  the pin into the slot, run the table to one end of the slot and")
-        w("  lock that stop collar, then the other end and lock the second.")
-        w("  The mortise then matches the tenon this template cuts.")
+        w("  Turn the stylus around so the stepped pin faces the template, fit a")
+        w(f'  {d.tenon_width:.4f}" bit - the mortise width - and drop the pin into the')
+        w("  slot. The slot bounds the cut in both directions, so run the table")
+        w("  to the ends of the slot and let it stop you. No stop collars.")
         w("")
-        w("  The slot's length is exact - it carries no clearance, because any")
-        w("  slack there runs the mortise long. The width carries the fit")
-        w("  clearance instead.")
+        w("MORTISE THIS SLOT CUTS")
+        w(f'  Mortise                  {d.mortise_wid:.4f}" x {d.mortise_len:.4f}"')
+        w(f'  Tenon at nominal         {d.tenon_width:.4f}" x {d.tenon_length:.4f}"')
+        w(f'  Difference               +{d.slot_clearance:.4f}" in both directions')
+        w("")
+        w("  The slot is a slip fit, so the pin is free to wander by the fit")
+        w("  clearance and all of it lands in the workpiece. It is applied to")
+        w("  the length as well as the width on purpose: the taper moves both")
+        w("  tenon dimensions together, so only a uniformly oversize mortise can")
+        w("  be matched by dialling the tenon up to meet it.")
+        w("")
+        if d.slot_match_depth <= d.profile_thk:
+            w(f'  So the tenon wants to finish around {d.slot_match_depth:.3f}" of bearing depth')
+            w(f'  rather than the {d.profile_thk / 2:.3f}" nominal. Still start fully inserted at')
+            w(f'  {d.profile_thk:.3f}" and creep down to it - that figure is where you are')
+            w("  heading, not where you begin.")
+        else:
+            w("  WARNING: that is more than the taper can add back to the tenon.")
+            w("  The joint will stay loose. Reduce the slot clearance.")
         w("")
     w("HOLDER INTERFACE (fixed - matches the factory template)")
     w(f'  Layer 1  base plate      {d.base_len:.3f}" x {d.base_wid:.3f}" x {d.base_thk:.3f}" thick, square corners')
@@ -77,10 +93,21 @@ def build_report(spec: Spec) -> str:
     w("  Set the bearing depth by how far its edge sits below the template's")
     w("  free top face. Flush = 0. Deeper = bigger tenon.")
     w("")
+    w("  START FULLY INSERTED, against the widest part of the profile. That is")
+    w("  the biggest tenon this template can cut, so the first one will be too")
+    w("  fat - which is the point. Every correction from there takes wood off.")
+    w("  Start at nominal instead and a tenon that comes out under size is")
+    w("  scrap: you cannot put wood back.")
+    w("")
     w("     bearing depth      tenon size        tenon W x L")
     w("     -------------      ----------        -----------")
     for row in spec.adjustment_table():
-        marker = "  <-- NOMINAL" if row["is_nominal"] else ""
+        if row["is_start"]:
+            marker = "  <-- START HERE"
+        elif row["is_nominal"]:
+            marker = "  <-- nominal"
+        else:
+            marker = ""
         delta = "nominal" if row["is_nominal"] else f'{row["delta"]:+.4f}"'
         w(
             f'     {row["depth_label"]:>6}             {delta:>9}'
@@ -91,9 +118,13 @@ def build_report(spec: Spec) -> str:
     w(f'  Reduction ratio {_ratio(d.reduction_ratio)}:1 - a 0.010" error in setting')
     w(f'  the bearing is worth only {0.010 / d.reduction_ratio:.4f}" on the tenon.')
     w("")
-    w("  Workflow: cut a test tenon at nominal, try it in the mortise, then")
-    w("  move the bearing and cut again. Tight -> back the bearing out.")
-    w("  Loose -> push it in.")
+    w("  Workflow: cut the first tenon with the bearing fully inserted, try it,")
+    w("  then withdraw the bearing a little and recut the SAME tenon. Repeat")
+    w("  until it goes. You are creeping down onto the fit from above, so a")
+    w("  test piece is never wasted.")
+    w("")
+    w("  Once it fits, note the depth and leave the bearing there for the rest")
+    w("  of the joints in that batch.")
     w("")
 
     if spec.warnings:

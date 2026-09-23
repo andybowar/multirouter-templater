@@ -25,8 +25,8 @@ STYLUS_DIA = 0.375
 STYLUS_BEARING_FLUSH = True
 
 # Diameter of the stepped-down end of the stylus pin. Measured with calipers.
-# This end does not cut anything: it drops into the mortise slot so the table's
-# stop collars can be set against the slot's travel. It sets the slot's WIDTH.
+# This end rides the mortise slot and guides the mortise cut, so it is what the
+# slot is sized around - see geometry.Spec for the offset.
 STYLUS_PIN_DIA = 0.1920
 
 # The Multi-Router linkage is 1:1 (not 2:1 like a PantoRouter), so the bit
@@ -67,14 +67,17 @@ TAPER_RANGE = 0.045
 # Mortise slot (optional) - design decisions
 # ---------------------------------------------------------------------------
 
-# Added to the slot's WIDTH so the pin drops into a printed part instead of
-# being pressed into it. Deliberately NOT added to the length: the slot's
-# travel is what the stop collars are set against, so slack there would run
-# every mortise long. See geometry.Spec for the derivation.
+# Slip fit for the pin in the slot. The slot GUIDES the mortise cut, so the
+# pin is free to wander by this much and the whole of it lands in the workpiece:
+# the mortise comes out SLOT_CLEARANCE oversize in both dimensions. Applied
+# uniformly for exactly that reason - a uniformly oversize mortise is one the
+# taper can match, because the taper moves both tenon dimensions together.
+# Tighten it for a closer joint; it cannot go to zero or the pin binds.
 SLOT_CLEARANCE = 0.008
 
-# Wall left between the slot and the guide edge. The bearing loads that edge,
-# so this is what stops a slotted template from folding up under it.
+# Wall left between the slot and the guide edge. That wall works twice - the
+# bearing rides its outside cutting the tenon, the pin rides its inside cutting
+# the mortise - so this is what stops a slotted template folding up under load.
 MIN_SLOT_WALL_ERROR = 0.060
 MIN_SLOT_WALL_WARN = 0.100
 

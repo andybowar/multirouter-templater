@@ -53,28 +53,41 @@ touch the profile at a shallower setting.
 
 Mortise slot
 ------------
-Optional, and it cuts nothing. The stylus has a stepped-down pin on its far
-end; you turn the stylus around, drop that pin into a slot in the template,
-slide the table to each end of the slot and lock a stop collar there. The
-slot's travel is therefore the mortise's travel.
+Optional. The stylus has a stepped-down pin on its far end; you turn the
+stylus around and that pin rides in a slot in the template while you cut the
+mortise. **The slot is the guide** - it bounds the cut on both axes, so no
+stop collars are involved.
 
-The mortise has to accept the tenon, so it is `tenon_length` long, and it is
-cut in one pass with a bit of `tenon_width` diameter (that is what makes it a
-stadium of that width - the same fact that fixes the tenon's end radius). So
-the bit centre has to travel:
+That makes the slot exactly the region the pin is allowed to occupy, which is
+the pin's swept path, which is the mortise scaled down through the same kind
+of offset used everywhere else here:
 
-    bit travel = tenon_length - tenon_width
+    slot = mortise stadium offset INWARD by (tenon_width - pin_dia) / 2
 
-and the linkage is 1:1, so the pin travels exactly as far. Inside a stadium
-slot a pin of diameter `d` can move `slot_len - d` end to end, whatever the
-slot's width - the end arcs and the pin are concentric at the limit. Hence:
+The mortise accepts the tenon, so it is `tenon_length` long, and it is cut in
+one pass with a bit of `tenon_width` diameter - the same fact that fixes the
+tenon's end radius. Working the offset out per dimension:
 
-    slot_len = (tenon_length - tenon_width) + pin_dia      exact, no slack
-    slot_wid = pin_dia + SLOT_CLEARANCE                    fit only
+    slot_wid = pin_dia
+    slot_len = (tenon_length - tenon_width) + pin_dia
 
-Clearance goes on the width alone. Width slack costs a little centring; length
-slack would run every mortise long, and there is nothing downstream to catch
-it.
+Clearance
+~~~~~~~~~
+A guiding slot has to be a slip fit, and whatever clearance it carries the pin
+is free to wander, so it comes straight back out in the cut:
+
+    mortise = tenon nominal + SLOT_CLEARANCE, in BOTH dimensions
+
+That is why the clearance is applied uniformly, to the length as well as the
+width. An earlier revision put clearance on the width alone, on the grounds
+that length slack would run the mortise long. That was right while the slot
+only set stop collars; it is wrong now. The taper adjusts the tenon by a
+*uniform* offset - both dimensions move by the same delta - so only a mortise
+that is uniformly oversize can be matched by dialling the tenon. A mortise
+that is +c wide and +0 long cannot be, at any bearing depth.
+
+So the operator cuts the mortise from the slot, then runs the tenon up by
+`SLOT_CLEARANCE` from nominal, which is what `slot_match_depth` reports.
 """
 
 from __future__ import annotations
@@ -102,7 +115,7 @@ class Spec:
     stylus_dia: float = C.STYLUS_DIA
     taper_range: float = C.TAPER_RANGE
     profile_thk: float = C.PROFILE_THK
-    mortise_slot: bool = False  # cut the stop-collar slot for the stepped pin
+    mortise_slot: bool = False  # cut the guide slot for the stepped stylus pin
     pin_dia: float = C.STYLUS_PIN_DIA
 
     # --- derived ----------------------------------------------------------
@@ -127,8 +140,11 @@ class Spec:
     slot_wid: float = field(init=False)
     slot_travel: float = field(init=False)
     slot_depth: float = field(init=False)
-    slot_wall_side: float = field(init=False)
-    slot_wall_end: float = field(init=False)
+    slot_wall: float = field(init=False)
+    slot_clearance: float = field(init=False)
+    mortise_wid: float = field(init=False)
+    mortise_len: float = field(init=False)
+    slot_match_depth: float = field(init=False)
     issues: list[Issue] = field(init=False, default_factory=list)
 
     def __post_init__(self) -> None:
@@ -163,15 +179,40 @@ class Spec:
 
         # Mortise slot. Always computed so the page can show what it would be;
         # only cut, and only validated, when it is asked for.
-        self.slot_travel = self.tenon_length - self.tenon_width
-        self.slot_len = self.slot_travel + self.pin_dia
-        self.slot_wid = self.pin_dia + C.SLOT_CLEARANCE
+        #
+        # The slot is the mortise offset inward by (tenon_width - pin_dia)/2,
+        # then opened up uniformly by the fit clearance. Uniformly, because the
+        # taper corrects the tenon uniformly - see the module docstring.
+        self.slot_clearance = C.SLOT_CLEARANCE
+        self.slot_wid = self.pin_dia + self.slot_clearance
+        self.slot_len = (
+            self.tenon_length - self.tenon_width + self.pin_dia + self.slot_clearance
+        )
+        # How far the pin's centre can travel: the slot offset inward by pin/2.
+        self.slot_travel = self.slot_len - self.pin_dia
+        # What that actually cuts. The clearance is the whole of the error.
+        self.mortise_wid = self.tenon_width + self.slot_clearance
+        self.mortise_len = self.tenon_length + self.slot_clearance
+        # Bearing depth that grows the tenon to match it.
+        self.slot_match_depth = (
+            self.profile_thk
+            * (self.slot_clearance + self.taper_range / 2.0)
+            / self.taper_range
+        )
         # Sunk through the profile layer and no further: layers 1 and 2 are the
         # holder interface and are not ours to cut into.
         self.slot_depth = self.profile_thk
-        # Wall is measured at the top face, the smallest cross-section.
-        self.slot_wall_side = (self.prof_wid_top - self.slot_wid) / 2.0
-        self.slot_wall_end = (self.prof_len_top - self.slot_len) / 2.0
+
+        # ONE wall, not a side wall and an end wall. Both the profile and the
+        # slot are stadiums built on the same core segment - each is a uniform
+        # offset of the tenon - so the gap between them is the same everywhere,
+        # arcs included:
+        #
+        #   prof_len_top - prof_wid_top = tenon_length - tenon_width
+        #   slot_len     - slot_wid     = tenon_length - tenon_width
+        #
+        # Measured at the top face, the profile's smallest cross-section.
+        self.slot_wall = (self.prof_wid_top - self.slot_wid) / 2.0
 
         self._validate()
 
@@ -267,35 +308,38 @@ class Spec:
             self._validate_slot()
 
     def _validate_slot(self) -> None:
-        """The slot is cut out of the guide profile, so it spends its wall."""
-        # Measured at the top face - the profile's smallest cross-section, and
-        # the one the slot has to fit inside.
-        if self.slot_wall_side <= C.MIN_SLOT_WALL_ERROR:
-            max_pin = self.prof_wid_top - 2 * C.MIN_SLOT_WALL_ERROR - C.SLOT_CLEARANCE
-            self._err(
-                f'A {self.slot_wid:.4f}" mortise slot leaves only '
-                f'{self.slot_wall_side:.3f}" of wall on each side of a '
-                f'{self.prof_wid_top:.3f}" profile. The bearing rides that wall, '
-                f"so it would fold up under load. Use a bigger router bit, or "
-                f'turn the slot off - a pin under {max_pin:.4f}" would fit.'
-            )
-            return
-        elif self.slot_wall_side < C.MIN_SLOT_WALL_WARN:
+        """The slot is cut out of the guide profile, so it spends its wall.
+
+        That wall now works twice: the bearing rides its outside while cutting
+        the tenon, and the pin rides its inside while cutting the mortise.
+        """
+        if self.slot_match_depth > self.profile_thk:
             self._warn(
-                f'Mortise slot leaves {self.slot_wall_side:.3f}" of wall each '
-                f"side of the guide profile. It prints, but treat the template "
-                f"gently and check the profile width after a few tenons."
+                f'The mortise this slot cuts is {self.slot_clearance:.4f}" oversize, '
+                f"which is more than the taper can add back to the tenon "
+                f'(+{self.taper_range / 2:.4f}" at most). The joint will stay '
+                f"loose. Reduce the slot clearance or widen the taper range."
             )
 
-        # The slot runs the length of the profile; if it runs past the end
-        # there is no template left to guide anything.
-        if self.slot_wall_end <= C.MIN_SLOT_WALL_ERROR:
+        # One wall, so one message. It is the same distance at the sides, at
+        # the ends and around the arcs - see __post_init__.
+        if self.slot_wall <= C.MIN_SLOT_WALL_ERROR:
+            max_pin = self.prof_wid_top - 2 * C.MIN_SLOT_WALL_ERROR - self.slot_clearance
             self._err(
-                f'A {self.slot_len:.3f}" mortise slot leaves only '
-                f'{self.slot_wall_end:.3f}" at each end of a '
-                f'{self.prof_len_top:.3f}" profile. The slot is '
-                f'(tenon length - tenon width) + the {self.pin_dia:.4f}" pin, so '
-                f"it only fits when the bit is not much smaller than the stylus."
+                f'A {self.slot_wid:.4f}" x {self.slot_len:.3f}" mortise slot '
+                f'leaves only {self.slot_wall:.3f}" of wall inside a '
+                f'{self.prof_wid_top:.3f}" x {self.prof_len_top:.3f}" profile. '
+                f"The bearing rides the outside of that wall and the pin rides "
+                f"the inside, so it would fold up under load. Use a bigger "
+                f'router bit, or turn the slot off - a pin under {max_pin:.4f}" '
+                f"would fit."
+            )
+        elif self.slot_wall < C.MIN_SLOT_WALL_WARN:
+            self._warn(
+                f'Mortise slot leaves {self.slot_wall:.3f}" of wall all round it. '
+                f"It prints, but the bearing rides the outside of that wall while "
+                f"the pin pushes the inside at the limit of every mortise. Treat "
+                f"the template gently and check the profile after a few joints."
             )
 
     @property
@@ -323,12 +367,21 @@ class Spec:
         return -self.taper_range / 2.0 + frac * self.taper_range
 
     def adjustment_table(self, steps: int = 4) -> list[dict]:
+        """Bearing depth -> tenon size.
+
+        `is_start` marks the bearing fully inserted, against the widest part of
+        the profile. That is where an operator should begin: it gives the
+        biggest tenon the template can cut, and every correction from there
+        removes wood. Starting at nominal risks a tenon that comes out under
+        size, and there is no way back from that.
+        """
         rows = []
         for i in range(steps + 1):
             depth = self.profile_thk * i / steps
             delta = self.tenon_delta(depth)
             rows.append(
                 {
+                    "is_start": i == steps,
                     "depth": depth,
                     "depth_label": _frac_label(depth),
                     "delta": delta,
@@ -371,8 +424,11 @@ class Spec:
             "slot_wid": self.slot_wid,
             "slot_travel": self.slot_travel,
             "slot_depth": self.slot_depth,
-            "slot_wall_side": self.slot_wall_side,
-            "slot_wall_end": self.slot_wall_end,
+            "slot_wall": self.slot_wall,
+            "slot_clearance": self.slot_clearance,
+            "mortise_wid": self.mortise_wid,
+            "mortise_len": self.mortise_len,
+            "slot_match_depth": self.slot_match_depth,
         }
 
 

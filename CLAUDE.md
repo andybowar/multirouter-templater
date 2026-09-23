@@ -95,24 +95,28 @@ the bearing and nothing behind it is wide enough to touch the profile at a
 shallower setting. The stepped-down pin is on the opposite end — you turn the
 stylus around to use it — so it is never between the bearing and the template.
 
-### 4. The mortise slot is clearanced on width but not on length
+### 4. The mortise slot's clearance is applied to the length too
 
 ```
-slot_wid = pin_dia + SLOT_CLEARANCE    <-- clearance
-slot_len = travel   + pin_dia          <-- NO clearance
+slot_wid = pin_dia + SLOT_CLEARANCE
+slot_len = (tenon_length - tenon_width) + pin_dia + SLOT_CLEARANCE
 ```
 
-That asymmetry is deliberate. The slot's ends are what the stop collars get
-set against, so the slot's travel *is* the mortise's length. Slack there comes
-straight out as a long mortise, and nothing downstream catches it. Slack across
-the width costs a little centring and nothing else, and without it the pin will
-not drop into a printed part.
+Putting clearance on the length looks like slop that will run every mortise
+long. It does — by exactly `SLOT_CLEARANCE`, and that is the point.
 
-It is also why the width clearance is safe: inside a stadium slot a pin of
-diameter `d` travels `slot_len - d` end to end **whatever the slot's width** —
-at each limit the pin and the end arc are concentric, so the extra width
-cancels. Widening the slot does not lengthen the mortise. `check_geometry.py`
-asserts exactly this.
+The slot **guides** the cut; it does not set stop collars. So the pin is free
+to wander by the clearance on *both* axes, and all of it lands in the
+workpiece: the mortise comes out `SLOT_CLEARANCE` oversize in width and in
+length. The tenon is then dialled up to meet it, and **the taper is a uniform
+offset** — it moves both tenon dimensions by the same delta. A mortise that is
+`+c` wide and `+0` long could not be matched at any bearing depth. A uniformly
+oversize one is matched exactly, at `slot_match_depth`.
+
+An earlier revision clearanced the width alone and documented the opposite
+rule. That was correct while the slot only set stop collars. The moment the
+slot became the guide it was wrong. `check_geometry.py` asserts the mortise is
+uniformly oversize and that `tenon_delta(slot_match_depth) == SLOT_CLEARANCE`.
 
 ## Measured constants
 
@@ -135,8 +139,15 @@ computed. Overall thickness is 0.625"; the factory template is 0.500".
 
 Taper defaults give **±0.0225" of tenon over 0.250" of bearing travel**: 5.14°
 of draft as `draft_deg` reports it, a 5.56:1 reduction, and 0.0278" of bearing
-travel per 0.005" of tenon. Nominal sits at mid-depth so the operator can
-correct in either direction after a test cut.
+travel per 0.005" of tenon.
+
+Nominal sits at mid-depth, but **the operator is told to start fully
+inserted**, at the widest part of the profile — `is_start` in
+`adjustment_table()`. Wood only comes off: a tenon that is still fat can be
+recut, one that has gone under size is scrap. So the workflow creeps *down*
+onto the fit and nominal is a reference point, not a starting point. Earlier
+revisions told the operator to begin at nominal; that was wrong and it is the
+kind of advice that reads as harmless. Do not put it back.
 
 `TAPER_RANGE` has been raised twice — 0.020" to 0.040" in `6abdf75`, then to
 0.045". **Every one of the figures above is derived from it**, so raising it
@@ -148,24 +159,34 @@ repeat that.
 
 ## The mortise slot
 
-Optional, off by default, and it **cuts nothing** — it is a setup aid. The
-stylus has a stepped-down pin on its far end; you turn the stylus around, drop
-that pin into the slot, run the table to each end and lock a stop collar there.
-The slot's travel becomes the mortise's travel.
+Optional, off by default. The stylus has a stepped-down pin on its far end;
+you turn the stylus around and **that pin rides the slot while you cut the
+mortise**. The slot is the guide — it bounds the cut on both axes, so there
+are no stop collars in the workflow. (It was specified as a collar-setting aid
+first; that is not what it is.)
+
+Because the pin is confined to the slot for the whole cut, the slot is exactly
+the pin's swept path — which is the mortise run through the same kind of
+offset as everything else here:
 
 ```
-mortise length = tenon_length            (the tenon has to fit it)
-mortise bit    = tenon_width             (already an input; single-pass stadium)
-bit travel     = tenon_length - tenon_width
-linkage 1:1    => pin travel = bit travel
+slot = mortise stadium offset INWARD by (tenon_width - pin_dia) / 2
 
-slot_len = (tenon_length - tenon_width) + pin_dia
-slot_wid = pin_dia + SLOT_CLEARANCE
+mortise length = tenon_length      (the tenon has to fit it)
+mortise bit    = tenon_width       (already an input; single-pass stadium)
+
+  => slot_wid = pin_dia            + SLOT_CLEARANCE
+     slot_len = (tenon_length - tenon_width) + pin_dia + SLOT_CLEARANCE
 ```
 
 It reuses the ground truth above rather than adding a second model: the same
 fact that fixes the tenon's end radius (`mortise_bit = tenon_width`) is what
-makes the travel term correct. Same `SlotOverall` primitive as everything else.
+makes the length term correct. Same `SlotOverall` primitive as everything else,
+and a uniform offset of a stadium is still a stadium.
+
+`slot_travel` is the pin *centre's* range, `slot_len - pin_dia`. `mortise_wid`
+/ `mortise_len` are what actually gets cut. `slot_match_depth` is the bearing
+depth that grows the tenon by `SLOT_CLEARANCE` to meet it — see #4 above.
 
 The slot is sunk from the free top face to the **base of the profile and no
 further** — 0.250" deep. Layers 1 and 2 are the holder interface and are not
@@ -173,10 +194,24 @@ ours to cut into. If the pin turns out to need more engagement than that, the
 answer is a thicker layer 3, not a deeper hole.
 
 It costs wall out of the guide profile, measured at the top face because that
-is the smallest cross-section, and the bearing loads exactly that wall. Hence
-`MIN_SLOT_WALL_ERROR` / `_WARN`. Note the end wall works out independent of
-tenon length — the `tenon_length` terms cancel — so a slot that fits at one
-length fits at every length for that bit.
+is the smallest cross-section. That wall works twice — the bearing rides its
+outside cutting the tenon, the pin rides its inside cutting the mortise —
+hence `MIN_SLOT_WALL_ERROR` / `_WARN`.
+
+There is **one** wall, `slot_wall`, not a side wall and an end wall. Both
+stadiums are built on the same core segment:
+
+```
+prof_len_top - prof_wid_top = tenon_length - tenon_width
+slot_len     - slot_wid     = tenon_length - tenon_width
+```
+
+so the slot is a uniform offset of the profile and the gap is identical at the
+sides, at the ends and around the arcs. It was briefly modelled as two numbers
+with a warning each, which produced two near-identical banners describing one
+measurement. It also means the wall is independent of tenon length — the
+`tenon_length` terms cancel — so a slot that fits at one length fits at every
+length for that bit.
 
 ## Units
 
@@ -217,6 +252,17 @@ is the only conversion point — keep it that way.
   the geometry under you.
 - **Sectioning exactly at a layer interface** picks up the wrong layer. Offset
   by a small epsilon when verifying cross-sections.
+- **The phone `@media` block must stay last in the stylesheet.** A media query
+  carries no extra specificity, so it beats a base rule only by coming after
+  it. The block was written near the top and nearly every override in it —
+  table sizing, tap targets, `.derived`, `pre.report` — was silently dead
+  while looking perfectly correct in the source.
+- **Grid tracks are sized by their content's min-content width.** `1fr` is
+  `minmax(auto, 1fr)`, and a `<pre>` that scrolls does *not* stop that
+  propagating up unless the grid item itself has `min-width: 0`. The setup
+  sheet widened the whole page to 618px at every viewport — but only after
+  Python had rendered into it, so the page looked fine on load and broke a
+  second later. `main > div { min-width: 0 }` is load-bearing.
 
 ## Three levels of capability
 
@@ -320,6 +366,16 @@ node tools/check_browser.mjs
 #    the generated SVG. `node --check` catches syntax errors.
 ```
 
+```sh
+# 7. Real layout, which is where the responsive failures live. Serve the built
+#    site, block PyScript, inject a state object and call refresh()/render()
+#    yourself - no 23 MB Pyodide wait - then compare
+#    documentElement.scrollWidth against clientWidth at 320/360/375/414 px.
+#    A page that fits before render and overflows after is a min-content
+#    problem in a grid track, not a media-query problem.
+npm install --prefix tools puppeteer && npx --yes puppeteer browsers install chrome
+```
+
 Previews can be rasterised for visual inspection with
 `qlmanage -t -s 1500 -o <dir> file.svg` on macOS. Headless Chrome via puppeteer
 *does* drive the live page successfully, if you raise `protocolTimeout` — the
@@ -360,9 +416,15 @@ adjustment table belongs on the setup sheet, not the part. It was previously
 five lines and the user cut it back; do not re-expand it.
 
 The preview diagram is deliberately dimensioned with **only** profile-at-base,
-profile-at-top and resulting tenon. Holder-interface dimensions were removed on
-request. The dimension stack sorts by size so the nesting stays correct when
-the template comes out smaller than the tenon.
+profile-at-top, resulting tenon, and — when the mortise slot is on — the slot
+length, in both views. Holder-interface dimensions were removed on request.
+
+The length stack sorts by size so the nesting stays correct when the template
+comes out smaller than the tenon; the slot goes through the same sort rather
+than being pinned to the inside. Adding a row grows the plan's top margin
+**and its viewBox by the same amount**, so the part keeps its size instead of
+shrinking to pay for the dimension. The side elevation does the same with its
+top margin, which is otherwise a constant because nothing sits above the part.
 
 There is deliberately **no advice about which router bit to use**. A prompt
 recommending a particular bit was added and then removed on request. Any bit
