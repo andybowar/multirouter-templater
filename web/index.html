@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Multi-Router Tenon Template Generator</title>
+<!-- Must precede every module script on the page, PyScript's included: the
+     vendored three.js example modules import the bare specifier "three".
+     three.module.js finds ./three.core.js on its own, relatively. Nothing here
+     is fetched until the 3D preview is asked for. -->
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js" } }
+</script>
 <link rel="stylesheet" href="https://pyscript.net/releases/2026.7.3/core.css">
 <script type="module" src="https://pyscript.net/releases/2026.7.3/core.js"></script>
 <style>
@@ -198,6 +205,29 @@
   .legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--muted); margin-top: 10px; }
   .legend span { display: flex; align-items: center; gap: 6px; }
   .swatch { width: 18px; height: 0; border-top-width: 2px; border-top-style: solid; }
+
+  .viewer-box {
+    position: relative; width: 100%; aspect-ratio: 16 / 10;
+    background: #eef0f1; border: 1px solid var(--line); border-radius: 6px;
+    overflow: hidden; touch-action: none;
+  }
+  .viewer-box canvas { display: block; width: 100%; height: 100%; }
+  .viewer-empty {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; text-align: center; padding: 20px;
+    font-size: 13px; color: var(--muted); line-height: 1.5;
+  }
+  /* `display: flex` above beats the UA stylesheet's [hidden] { display: none },
+     so the overlay has to be told again. */
+  .viewer-empty[hidden] { display: none; }
+  .viewer-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
+  .viewer-bar button {
+    padding: 9px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--line); background: #fff; border-radius: 6px; color: var(--ink);
+  }
+  .viewer-bar button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .viewer-bar button:hover:not(:disabled) { filter: brightness(0.96); }
+  .viewer-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
 
   pre.report {
     background: #fbfbfc; border: 1px solid var(--line); border-radius: 6px;
@@ -479,6 +509,26 @@
     </div>
 
     <div class="panel">
+      <h2>3D Preview</h2>
+      <div class="viewer-box" id="viewerBox">
+        <div class="viewer-empty" id="viewerEmpty">
+          Renders the <em>actual exported solid</em> &mdash; the same STL the button above
+          downloads &mdash; so you can check it before it reaches the slicer.
+          Needs the CAD engine.
+        </div>
+      </div>
+      <div class="viewer-bar">
+        <button class="primary" id="view3d" disabled>Render 3D preview</button>
+        <button id="viewFront" disabled>Profile side</button>
+        <button id="viewBack" disabled>Engraved face</button>
+      </div>
+      <div class="fmt-note" id="viewerNote">
+        Drag to orbit, scroll to zoom. Check the engraving reads the right way round on the
+        back face &mdash; it sits on the print bed, so it is mirrored in the model on purpose.
+      </div>
+    </div>
+
+    <div class="panel">
       <h2>Setup Sheet</h2>
       <pre class="report" id="report"></pre>
     </div>
@@ -678,6 +728,18 @@ function syncButtons() {
     const needsCad = b.dataset.fmt !== "report";
     b.disabled = !ok || !coreReady || (needsCad && !cadReady);
   });
+
+  /* The 3D preview needs the kernel too, but pressing it is an explicit ask,
+     so it stays live on a phone and pulls the kernel in the same way the
+     Load button does. Only the arithmetic has to be there first. */
+  const v = $("view3d");
+  const stale = viewPayload !== null && viewPayload !== JSON.stringify(payload());
+  // Not gated on cadLoading: pressing it mid-download just joins the load
+  // that is already running, which is what ensureCad() is for.
+  v.disabled = !ok || !coreReady;
+  v.textContent = viewPayload === null
+    ? (cadReady || cadLoading ? "Render 3D preview" : "Render 3D preview (loads CAD engine)")
+    : stale ? "Update 3D preview" : "Re-render 3D preview";
 
   const note = $("cadNote");
   if (cadReady || (!IS_MOBILE && !cadError)) { note.hidden = true; return; }
@@ -990,6 +1052,179 @@ function drawSide(d) {
 
   $("side").innerHTML = g.join("");
 }
+
+/* --- 3D preview -------------------------------------------------------- */
+
+/* Renders the bytes the STL button would hand you, not a second model built
+   from the same numbers. `mrttExport` is the only source, so what is on screen
+   is what gets printed by construction - including the engraving, which is the
+   one thing here that is easy to ship backwards.
+
+   three.js is vendored and pinned under web/vendor/three, and imported only
+   when this panel is used: ~430 KB gzipped that a visitor who never opens it
+   never pays for. It needs the CAD kernel anyway, so it sits behind the same
+   ensureCad() door as the exports. */
+let THREE = null, STLLoader = null, OrbitControls = null;
+let view = null;            // { renderer, scene, camera, controls, mesh, box3 }
+let viewPayload = null;     // payload the current mesh was built from
+
+async function loadThree() {
+  if (THREE) return;
+  const [t, stl, orbit] = await Promise.all([
+    import("./vendor/three/three.module.js"),
+    import("./vendor/three/STLLoader.js"),
+    import("./vendor/three/OrbitControls.js"),
+  ]);
+  THREE = t;
+  STLLoader = stl.STLLoader;
+  OrbitControls = orbit.OrbitControls;
+}
+
+const viewerMsg = (html) => {
+  const el = $("viewerEmpty");
+  if (html === null) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = html;
+};
+
+function initViewer() {
+  const box = $("viewerBox");
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(box.clientWidth, box.clientHeight, false);
+  box.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xeef0f1);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa3ad, 2.2));
+  const key = new THREE.DirectionalLight(0xffffff, 1.5);
+  key.position.set(1, -1.4, 1.6);
+  scene.add(key);
+  // A second light on the engraved side was tried and made it worse: it lifts
+  // the face and the 0.012"-deep recess by the same amount and the text washes
+  // out. The letters read from the contrast between the recess walls and the
+  // face, so the back view is tilted a few degrees instead - see VIEW_BACK.
+
+  // The part is modelled in millimetres with +Z up, so tell the camera that
+  // rather than rotating the geometry to three.js's Y-up default.
+  const camera = new THREE.PerspectiveCamera(35, 16 / 10, 0.5, 5000);
+  camera.up.set(0, 0, 1);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = false;      // render on demand instead of looping
+  controls.addEventListener("change", () => renderer.render(scene, camera));
+
+  view = { renderer, scene, camera, controls, mesh: null, box3: null };
+
+  new ResizeObserver(() => {
+    if (!view) return;
+    const w = box.clientWidth, h = box.clientHeight;
+    if (!w || !h) return;
+    view.camera.aspect = w / h;
+    view.camera.updateProjectionMatrix();
+    view.renderer.setSize(w, h, false);
+    view.renderer.render(view.scene, view.camera);
+  }).observe(box);
+}
+
+/* Frame the part from a given direction.
+
+   Fits the box as it actually projects from that direction rather than its
+   bounding sphere - looking down the short axis of a part this long, a sphere
+   fit wastes most of the frame. */
+function frame(dir, up) {
+  const { camera, controls, box3, renderer, scene } = view;
+  const center = box3.getCenter(new THREE.Vector3());
+  const d = dir.clone().normalize();
+  const right = new THREE.Vector3().crossVectors(up, d).normalize();
+  const trueUp = new THREE.Vector3().crossVectors(d, right).normalize();
+
+  let halfW = 0, halfH = 0, halfD = 0;
+  for (const x of [box3.min.x, box3.max.x])
+    for (const y of [box3.min.y, box3.max.y])
+      for (const z of [box3.min.z, box3.max.z]) {
+        const v = new THREE.Vector3(x, y, z).sub(center);
+        halfW = Math.max(halfW, Math.abs(v.dot(right)));
+        halfH = Math.max(halfH, Math.abs(v.dot(trueUp)));
+        halfD = Math.max(halfD, Math.abs(v.dot(d)));
+      }
+  const tan = Math.tan((camera.fov * Math.PI) / 360);
+  const dist = Math.max(halfH / tan, halfW / (tan * camera.aspect)) * 1.16 + halfD;
+
+  camera.up.copy(up);
+  camera.position.copy(center).add(dir.clone().normalize().multiplyScalar(dist));
+  camera.near = dist / 100;
+  camera.far = dist * 100;
+  camera.updateProjectionMatrix();
+  controls.target.copy(center);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+const VIEW_FRONT = () => frame(new THREE.Vector3(0.9, -1.5, 1.1), new THREE.Vector3(0, 0, 1));
+/* At the z=0 face, which is the one that carries the engraving. Tilted a few
+   degrees off dead-on: square to the face the recess has no visible depth and
+   the text almost disappears. Still square enough to read at a glance - and
+   it should read the right way round, because the model mirrors it. */
+const VIEW_BACK = () =>
+  frame(new THREE.Vector3(0.16, -0.22, -1), new THREE.Vector3(0, 1, 0));
+
+async function render3d() {
+  if (!state || !state.ok) return;
+  const btn = $("view3d");
+  btn.disabled = true;
+
+  try {
+    if (!cadReady) {
+      viewerMsg("Loading the CAD engine&hellip;");
+      if (!(await ensureCad())) {
+        viewerMsg("The CAD engine did not start, so there is nothing to show here.");
+        return;
+      }
+    }
+
+    viewerMsg("Loading the viewer&hellip;");
+    await loadThree();
+    if (!view) initViewer();
+
+    // Meshing runs the kernel on this thread; let the label paint first.
+    viewerMsg("Building the solid&hellip;");
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+
+    const pl = payload();
+    const out = await window.mrttExport("stl", JSON.stringify(pl));
+    const buf = out.data.buffer.slice(
+      out.data.byteOffset, out.data.byteOffset + out.data.byteLength);
+    const geom = new STLLoader().parse(buf);
+
+    if (view.mesh) {
+      view.scene.remove(view.mesh);
+      view.mesh.geometry.dispose();
+      view.mesh.material.dispose();
+    }
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xc9cdd2, metalness: 0.05, roughness: 0.8, flatShading: true,
+    });
+    view.mesh = new THREE.Mesh(geom, material);
+    view.scene.add(view.mesh);
+    geom.computeBoundingBox();
+    view.box3 = geom.boundingBox.clone();
+
+    viewerMsg(null);
+    VIEW_FRONT();
+    viewPayload = JSON.stringify(pl);
+    $("viewFront").disabled = false;
+    $("viewBack").disabled = false;
+  } catch (e) {
+    viewerMsg("Could not build the preview: " + (e.message || e));
+  } finally {
+    syncButtons();
+  }
+}
+
+$("view3d").addEventListener("click", render3d);
+$("viewFront").addEventListener("click", () => view && view.mesh && VIEW_FRONT());
+$("viewBack").addEventListener("click", () => view && view.mesh && VIEW_BACK());
 
 /* --- Export ----------------------------------------------------------- */
 
