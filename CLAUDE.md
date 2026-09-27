@@ -95,28 +95,50 @@ the bearing and nothing behind it is wide enough to touch the profile at a
 shallower setting. The stepped-down pin is on the opposite end — you turn the
 stylus around to use it — so it is never between the bearing and the template.
 
-### 4. The mortise slot's clearance is applied to the length too
+### 4. The mortise slot is deliberately slacker in length than in width
 
 ```
 slot_wid = pin_dia + SLOT_CLEARANCE
 slot_len = (tenon_length - tenon_width) + pin_dia + SLOT_CLEARANCE
+                                                  + SLOT_LENGTH_SLACK
+
+=> mortise = tenon + SLOT_CLEARANCE                      in WIDTH
+             tenon + SLOT_CLEARANCE + SLOT_LENGTH_SLACK  in LENGTH
 ```
 
-Putting clearance on the length looks like slop that will run every mortise
-long. It does — by exactly `SLOT_CLEARANCE`, and that is the point.
+The asymmetry is the point, and it is **not** symmetric sloppiness — it is
+which dimension the taper gets spent on.
 
 The slot **guides** the cut; it does not set stop collars. So the pin is free
-to wander by the clearance on *both* axes, and all of it lands in the
-workpiece: the mortise comes out `SLOT_CLEARANCE` oversize in width and in
-length. The tenon is then dialled up to meet it, and **the taper is a uniform
-offset** — it moves both tenon dimensions by the same delta. A mortise that is
-`+c` wide and `+0` long could not be matched at any bearing depth. A uniformly
-oversize one is matched exactly, at `slot_match_depth`.
+to wander by the clearance on both axes and all of it lands in the workpiece.
+The clearance is therefore uniform. `SLOT_LENGTH_SLACK` is added on top of it,
+to the length only.
 
-An earlier revision clearanced the width alone and documented the opposite
-rule. That was correct while the slot only set stop collars. The moment the
-slot became the guide it was wrong. `check_geometry.py` asserts the mortise is
-uniformly oversize and that `tenon_delta(slot_match_depth) == SLOT_CLEARANCE`.
+**The taper is a uniform offset** — it moves both tenon dimensions by the same
+delta. So whichever dimension binds first sets the tenon and the other merely
+follows. A mortise and tenon is glued on the cheeks, long grain to long grain;
+the ends of the tenon meet end grain and hold almost nothing. So the thickness
+(`tenon_width`) must be dead on and the length need not be. If the length could
+bind first, the operator would shave the tenon until it went in end to end and
+surrender the identical amount of thickness doing it — paying with the only
+dimension that carries the joint. The slack takes the length out of the
+contest, so `slot_match_depth` serves the width alone.
+
+This is also what absorbs print error: a template that comes out a few thou
+under cuts a correspondingly short mortise, and the margin swallows it instead
+of the thickness paying for it. **With the printed error the user measured
+(~0.010") the 0.010" slack is roughly break-even, not surplus** — the real fix
+for that is slicer XY compensation, not more slack here. Raising
+`SLOT_LENGTH_SLACK` costs nothing but `slack/2` of wall at the two ends of the
+slot.
+
+This has now been wrong in both directions, so be careful before you "fix" it:
+an early revision clearanced the width alone (right only while the slot set
+stop collars), then it clearanced both equally — right about the taper being
+uniform, wrong about what you want to spend it on. `check_geometry.py` asserts
+the mortise is slacker in length than in width, that
+`tenon_delta(slot_match_depth) == SLOT_CLEARANCE`, and that the length comes
+free strictly before the width does.
 
 ## Measured constants
 
@@ -132,13 +154,15 @@ silently** — the project brief explicitly required that.
 | layer 1 | 3.500 × 1.000 × 0.250" | factory template, rectangle |
 | layer 2 | 3.250 × 0.750 × 0.125" | factory template, stadium |
 | layer 3 | 0.250" thick | design decision — hosts the taper |
-| `TAPER_RANGE` | 0.045" total | design decision |
+| `TAPER_RANGE` | 0.055" total | design decision |
+| `SLOT_CLEARANCE` | 0.008" | design decision — pin slip fit |
+| `SLOT_LENGTH_SLACK` | 0.010" | design decision — see #4 |
 
 Layers 1 and 2 are the holder interface and are **fixed**. Only layer 3 is
 computed. Overall thickness is 0.625"; the factory template is 0.500".
 
-Taper defaults give **±0.0225" of tenon over 0.250" of bearing travel**: 5.14°
-of draft as `draft_deg` reports it, a 5.56:1 reduction, and 0.0278" of bearing
+Taper defaults give **±0.0275" of tenon over 0.250" of bearing travel**: 6.28°
+of draft as `draft_deg` reports it, a 4.55:1 reduction, and 0.0227" of bearing
 travel per 0.005" of tenon.
 
 Nominal sits at mid-depth, but **the operator is told to start fully
@@ -149,13 +173,17 @@ onto the fit and nominal is a reference point, not a starting point. Earlier
 revisions told the operator to begin at nominal; that was wrong and it is the
 kind of advice that reads as harmless. Do not put it back.
 
-`TAPER_RANGE` has been raised twice — 0.020" to 0.040" in `6abdf75`, then to
-0.045". **Every one of the figures above is derived from it**, so raising it
-again means re-deriving the draft angle, the reduction ratio, the travel per
-0.005", the profile-at-base dimension quoted in the README, and the expected
+`TAPER_RANGE` has been raised three times — 0.020" to 0.040" in `6abdf75`, then
+to 0.045", then to 0.055" once a printed template came out ~0.010" under and
+the range had to absorb it. **Every one of the figures above is derived from
+it**, so raising it again means re-deriving the draft angle, the reduction
+ratio, the travel per 0.005", the profile-at-base dimension quoted in the
+README, the default in the `taper` input in `index.html`, and the expected
 values in `check_geometry.py`. The 0.040" bump changed the constant alone and
 left this file and the README stating half the real numbers for a while; don't
-repeat that.
+repeat that. `check_geometry.py` now asserts the draft angle, the reduction
+ratio and the travel per 0.005" directly, so a bare constant change fails
+loudly instead of quietly.
 
 ## The mortise slot
 
@@ -177,16 +205,20 @@ mortise bit    = tenon_width       (already an input; single-pass stadium)
 
   => slot_wid = pin_dia            + SLOT_CLEARANCE
      slot_len = (tenon_length - tenon_width) + pin_dia + SLOT_CLEARANCE
+                                                       + SLOT_LENGTH_SLACK
 ```
 
 It reuses the ground truth above rather than adding a second model: the same
 fact that fixes the tenon's end radius (`mortise_bit = tenon_width`) is what
 makes the length term correct. Same `SlotOverall` primitive as everything else,
-and a uniform offset of a stadium is still a stadium.
+and a uniform offset of a stadium is still a stadium — the slack then stretches
+the length alone, which is a stadium too, just no longer a uniform offset of
+the profile.
 
 `slot_travel` is the pin *centre's* range, `slot_len - pin_dia`. `mortise_wid`
 / `mortise_len` are what actually gets cut. `slot_match_depth` is the bearing
-depth that grows the tenon by `SLOT_CLEARANCE` to meet it — see #4 above.
+depth that grows the tenon by `SLOT_CLEARANCE` to meet the mortise **width** —
+the length is slack by construction and never enters it. See #4 above.
 
 The slot is sunk from the free top face to the **base of the profile and no
 further** — 0.250" deep. Layers 1 and 2 are the holder interface and are not
@@ -198,20 +230,26 @@ is the smallest cross-section. That wall works twice — the bearing rides its
 outside cutting the tenon, the pin rides its inside cutting the mortise —
 hence `MIN_SLOT_WALL_ERROR` / `_WARN`.
 
-There is **one** wall, `slot_wall`, not a side wall and an end wall. Both
-stadiums are built on the same core segment:
+There is still **one** wall reported, `slot_wall`, not a side wall and an end
+wall — but since `SLOT_LENGTH_SLACK` it is no longer the same distance all
+round:
 
 ```
 prof_len_top - prof_wid_top = tenon_length - tenon_width
-slot_len     - slot_wid     = tenon_length - tenon_width
+slot_len     - slot_wid     = tenon_length - tenon_width + SLOT_LENGTH_SLACK
 ```
 
-so the slot is a uniform offset of the profile and the gap is identical at the
-sides, at the ends and around the arcs. It was briefly modelled as two numbers
-with a warning each, which produced two near-identical banners describing one
-measurement. It also means the wall is independent of tenon length — the
-`tenon_length` terms cancel — so a slot that fits at one length fits at every
-length for that bit.
+The slot's core segment now runs `slack/2` past the profile's at each end, so
+along the flanks the gap is `(prof_wid_top - slot_wid)/2` as before, and past
+the profile's core segment it closes to a minimum on the axis at the two ends,
+exactly `slack/2` thinner. `slot_wall` is defined as **that minimum** —
+`(prof_len_top - slot_len)/2` — because it is the governing number and because
+one piece of material deserves one number. It was briefly modelled as two with
+a warning each, which produced two near-identical banners describing one
+measurement; don't go back to that just because the two values now differ.
+
+The wall is still independent of tenon length — the `tenon_length` terms
+cancel — so a slot that fits at one length fits at every length for that bit.
 
 ## Units
 
@@ -459,16 +497,29 @@ Verified in software: the factory calibration point, cross-sections at multiple
 heights (including mismatched bits), STL watertightness, engraving mirroring,
 every validation error path, and the frontend render logic.
 
-**Not verified: nothing here has cut wood.** Reproducing the factory template
-is a strong calibration point, not proof. The first printed template should be
-measured across the profile base with calipers before it is trusted.
+**One template has now been printed and used.** It came out roughly 0.010"
+under on every dimension. That is an offset, not shrinkage — shrinkage is
+proportional, and a flat 0.010" across a 0.625" width and a 3.500" base plate
+is not — so it points at extrusion width / flow or a negative XY size
+compensation in the slicer, and it belongs in the slicer, not in `config.py`.
+Two changes came out of that print: `TAPER_RANGE` went to 0.055" so the range
+can absorb it, and `SLOT_LENGTH_SLACK` exists so the error lands in the
+mortise's length instead of its thickness (see #4).
+
+Still open from that print: whether the slot **width** printed under too. At
+0.200" nominal it only has 0.008" to give before a 0.1920" pin binds.
+
+The math is otherwise verified only in software. Reproducing the factory
+template is a strong calibration point, not proof, and no joint cut from this
+has been reported closing. Measure any new print across the profile base with
+calipers before trusting it.
 
 ## Open hardware questions
 
 - The part is 0.625" thick against the factory 0.500", so the bearing bracket
   needs 0.125" more protrusion than the user is used to.
-- Bearing protrusion is currently set "by feel". At 5.56:1 that is survivable —
-  0.010" of slop in the setting is 0.0018" on the tenon — but a caliper reading
+- Bearing protrusion is currently set "by feel". At 4.55:1 that is survivable —
+  0.010" of slop in the setting is 0.0022" on the tenon — but a caliper reading
   against a flat reference face on the bracket would make the adjustment table
   exact rather than advisory.
 - When the profile is narrower than layer 2 (0.750"), over-inserting the

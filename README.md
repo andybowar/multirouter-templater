@@ -112,11 +112,11 @@ face. Flush = 0. Deeper = bigger tenon.
 
 | Bearing depth | Tenon | |
 |---|---|---|
-| flush | −0.0225" | |
-| 1/16" | −0.01125" | |
+| flush | −0.0275" | |
+| 1/16" | −0.01375" | |
 | 1/8" | nominal | |
-| 3/16" | +0.01125" | |
-| **1/4"** | **+0.0225"** | **start here** |
+| 3/16" | +0.01375" | |
+| **1/4"** | **+0.0275"** | **start here** |
 
 **Start fully inserted**, against the widest part of the profile. That is the
 biggest tenon the template can cut, so the first one comes out too fat — which
@@ -127,8 +127,8 @@ Always come down onto the fit, never up to it. A tenon that is still fat can be
 cut again; one that has gone under size is scrap, because you cannot put wood
 back. Nominal is the size you asked for, not where to begin.
 
-**0.028" of bearing travel = 0.005" of tenon.** That's a 5.6:1 reduction, so a
-sloppy 0.010" error setting the bearing is worth 0.0018" on the tenon.
+**0.0227" of bearing travel = 0.005" of tenon.** That's a 4.5:1 reduction, so a
+sloppy 0.010" error setting the bearing is worth 0.0022" on the tenon.
 
 ## The mortise slot (optional)
 
@@ -144,13 +144,23 @@ stop you. No stop collars.
 
 The slot is derived, not copied — it is the mortise offset inward by
 `(tenon width − pin) / 2`, which for the default 1/2" × 2" tenon is a
-0.200" × 1.700" slot, 0.250" deep.
+0.200" × 1.710" slot, 0.250" deep.
 
 Because it guides, its slip fit lands in the work: the mortise comes out
-0.008" oversize in *both* directions. That is deliberate — the taper moves both
-tenon dimensions together, so a uniformly oversize mortise is one the tenon can
-be dialled up to meet. The page and the setup sheet tell you the bearing depth
-that does it (0.169" instead of the 0.125" nominal, on the defaults).
+0.008" oversize in width. The length gets that plus a further 0.010" of
+deliberate slack, so it finishes 0.018" long.
+
+**Fit the width and ignore the length.** The joint is glued on the cheeks, long
+grain to long grain; the ends of the tenon are end grain and hold next to
+nothing. The taper moves both tenon dimensions together, so whichever one binds
+first is the one that sets the tenon — and if that were the length you would
+shave the tenon to get it in end to end and give up the identical amount of
+thickness doing it, spending the dimension that carries the joint on the one
+that does not. The slack keeps the length out of the contest. It also quietly
+absorbs a template that printed a few thou under.
+
+The page and the setup sheet give the bearing depth that brings the cheeks up
+to the mortise (0.161" instead of the 0.125" nominal, on the defaults).
 
 The slot spends wall out of the guide profile — the wall the bearing rides on
 the outside and the pin rides on the inside — so on a small bit the app will
@@ -166,7 +176,7 @@ tapered guide profile is computed.
 |---|---|---|
 | base plate | 3.500 × 1.000" | 0.250" (square corners) |
 | middle step | 3.250 × 0.750" | 0.125" (stadium) |
-| guide profile | computed | 0.250" (~5.14° draft) |
+| guide profile | computed | 0.250" (~6.28° draft) |
 
 Overall 0.625", against 0.500" for the factory template — the guide profile is
 thicker to make room for the taper.
@@ -191,15 +201,21 @@ Files export in millimetres.
 
 Print the default configuration (0.500" tenon, 2.000" long, 0.500" bit) and
 measure across the guide profile at its base. It should read
-**0.6475" × 2.1475"** — the 0.6250" × 2.1250" nominal plus half the 0.045"
+**0.6525" × 2.1525"** — the 0.6250" × 2.1250" nominal plus half the 0.055"
 taper range.
 
 That number transfers 1:1 to the tenon. Closing any gap is exactly what the
 taper is for.
 
-**Nothing here has cut wood yet.** The underlying math reproduces a measured
-factory template exactly, which is a strong calibration point — but it is not
-proof.
+One template has been printed and tried. It measured about 0.010" under on
+every dimension — a printer offset rather than material shrinkage, since
+shrinkage would scale with the dimension and this did not. If yours does the
+same, correct it with XY size compensation in your slicer; the taper will
+absorb what is left.
+
+**No joint cut from this has been reported closing yet.** The underlying math
+reproduces a measured factory template exactly, which is a strong calibration
+point — but it is not proof.
 
 ## How it works
 

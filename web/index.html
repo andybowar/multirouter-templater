@@ -347,6 +347,8 @@
         <li>Turn the stylus around so the stepped-down pin faces the template.</li>
         <li>Drop that pin into the slot and cut, running the pin out to the ends of the
           slot and letting them stop you.</li>
+        <li>Fit the tenon to the mortise's <strong>width</strong>. The mortise is cut a
+          little long on purpose and the tenon is never meant to touch its ends.</li>
       </ol>
       <p id="htSlot" hidden></p>
     </section>
@@ -413,11 +415,12 @@
             <label for="pin">Stylus pin diameter (stepped end)</label>
             <input type="text" id="pin" value="0.192" class="num" autocomplete="off">
             <div class="hint">Measured on the machine. Sets the mortise slot width; the
-              slot's <em>length</em> is computed and carries no clearance.</div>
+              slot's <em>length</em> is computed, and carries a little extra slack so the
+              mortise is never tight end to end.</div>
           </div>
           <div class="field">
             <label for="taper">Taper range (total, base to top)</label>
-            <input type="text" id="taper" value="0.045" class="num" autocomplete="off">
+            <input type="text" id="taper" value="0.055" class="num" autocomplete="off">
           </div>
           <div class="field">
             <label for="pthk">Guide profile depth</label>
@@ -827,10 +830,15 @@ function render() {
     $("htSlot").innerHTML =
       `At these settings it cuts a <strong>${f4(d.mortise_wid)} &times; ` +
       `${f4(d.mortise_len)}</strong> mortise &mdash; ${f4(d.slot_clearance)} over the ` +
-      `tenon in both directions, which is the slot's slip fit landing in the workpiece. ` +
-      `So the tenon wants to finish near <strong>${f4(d.slot_match_depth)}</strong> of ` +
-      `bearing depth rather than the ${f4(d.profile_thk / 2)} nominal &mdash; still start ` +
-      `fully in and creep down to it.`;
+      `tenon in width, which is the slot's slip fit landing in the workpiece, and ` +
+      `${f4(d.slot_clearance + d.slot_slack)} over it in length, which is that plus ` +
+      `${f4(d.slot_slack)} of deliberate slack. <strong>Fit the width and ignore the ` +
+      `length.</strong> The joint is glued on the cheeks; the ends of the tenon are end ` +
+      `grain and hold almost nothing, so the length is kept slack on purpose &mdash; if ` +
+      `it could bind first you would shave the tenon to get it in end to end and lose ` +
+      `the same thickness doing it. So the tenon wants to finish near ` +
+      `<strong>${f4(d.slot_match_depth)}</strong> of bearing depth rather than the ` +
+      `${f4(d.profile_thk / 2)} nominal &mdash; still start fully in and creep down to it.`;
   }
 
   $("tableBody").innerHTML = table.map((r) => `

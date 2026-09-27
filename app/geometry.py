@@ -71,23 +71,46 @@ tenon's end radius. Working the offset out per dimension:
     slot_wid = pin_dia
     slot_len = (tenon_length - tenon_width) + pin_dia
 
-Clearance
-~~~~~~~~~
+Clearance, and why the length gets more of it
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 A guiding slot has to be a slip fit, and whatever clearance it carries the pin
 is free to wander, so it comes straight back out in the cut:
 
-    mortise = tenon nominal + SLOT_CLEARANCE, in BOTH dimensions
+    slot_wid = pin_dia + SLOT_CLEARANCE
+    slot_len = (tenon_length - tenon_width) + pin_dia + SLOT_CLEARANCE
+                                                      + SLOT_LENGTH_SLACK
 
-That is why the clearance is applied uniformly, to the length as well as the
-width. An earlier revision put clearance on the width alone, on the grounds
-that length slack would run the mortise long. That was right while the slot
-only set stop collars; it is wrong now. The taper adjusts the tenon by a
-*uniform* offset - both dimensions move by the same delta - so only a mortise
-that is uniformly oversize can be matched by dialling the tenon. A mortise
-that is +c wide and +0 long cannot be, at any bearing depth.
+    => mortise = tenon nominal + SLOT_CLEARANCE                 in WIDTH
+                 tenon nominal + SLOT_CLEARANCE + SLOT_LENGTH_SLACK in LENGTH
 
-So the operator cuts the mortise from the slot, then runs the tenon up by
-`SLOT_CLEARANCE` from nominal, which is what `slot_match_depth` reports.
+The clearance is uniform because the pin's wander is; the extra length is a
+deliberate asymmetry on top of it, and it is there because the two dimensions
+of a tenon are not worth the same.
+
+The joint's strength is in the cheeks - long grain to long grain. The ends of
+the tenon meet end grain and glue there is worth little. So the thickness
+(`tenon_width`) has to be dead on and the length does not.
+
+The taper adjusts the tenon by a *uniform* offset: both dimensions move by the
+same delta. That means whichever dimension binds first sets the tenon, and the
+other one just follows. If the mortise were the same amount oversize in both,
+the length would bind at the same moment as the thickness - and any error
+anywhere in the chain (a template that printed a few thou small, a bit running
+a shade under) would make it bind FIRST, so the operator would shave the tenon
+to get it in length-wise and give up the identical amount of thickness to do
+it. That trades the dimension the joint is glued on for the one it is not.
+
+Slack in the length takes the length out of the contest. It can never be the
+binding dimension, so the bearing depth is free to serve the thickness alone:
+the operator cuts the mortise from the slot, then runs the tenon up by
+`SLOT_CLEARANCE` from nominal to meet the mortise WIDTH, which is what
+`slot_match_depth` reports. The tenon then sits in a mortise that is
+`SLOT_LENGTH_SLACK` long on it, which no one will ever see or feel.
+
+(Earlier revisions got this wrong in both directions: first clearancing the
+width alone - correct only while the slot merely set stop collars - then
+clearancing both equally, which is right about the taper being uniform and
+wrong about what you want to spend it on.)
 """
 
 from __future__ import annotations
@@ -142,6 +165,7 @@ class Spec:
     slot_depth: float = field(init=False)
     slot_wall: float = field(init=False)
     slot_clearance: float = field(init=False)
+    slot_slack: float = field(init=False)
     mortise_wid: float = field(init=False)
     mortise_len: float = field(init=False)
     slot_match_depth: float = field(init=False)
@@ -181,19 +205,29 @@ class Spec:
         # only cut, and only validated, when it is asked for.
         #
         # The slot is the mortise offset inward by (tenon_width - pin_dia)/2,
-        # then opened up uniformly by the fit clearance. Uniformly, because the
-        # taper corrects the tenon uniformly - see the module docstring.
+        # opened up by the fit clearance in both directions, and then given
+        # extra LENGTH on purpose - see the module docstring. The width is the
+        # dimension the joint is glued on, so it is the one the taper is kept
+        # free to serve; the length is deliberately made slack so it can never
+        # bind first and drag the width down with it.
         self.slot_clearance = C.SLOT_CLEARANCE
+        self.slot_slack = C.SLOT_LENGTH_SLACK
         self.slot_wid = self.pin_dia + self.slot_clearance
         self.slot_len = (
-            self.tenon_length - self.tenon_width + self.pin_dia + self.slot_clearance
+            self.tenon_length
+            - self.tenon_width
+            + self.pin_dia
+            + self.slot_clearance
+            + self.slot_slack
         )
         # How far the pin's centre can travel: the slot offset inward by pin/2.
         self.slot_travel = self.slot_len - self.pin_dia
-        # What that actually cuts. The clearance is the whole of the error.
+        # What that actually cuts. Clearance is the whole of the width error;
+        # the length carries the slack on top of it.
         self.mortise_wid = self.tenon_width + self.slot_clearance
-        self.mortise_len = self.tenon_length + self.slot_clearance
-        # Bearing depth that grows the tenon to match it.
+        self.mortise_len = self.tenon_length + self.slot_clearance + self.slot_slack
+        # Bearing depth that grows the tenon to meet the mortise WIDTH. The
+        # length looks after itself - it is slack by construction.
         self.slot_match_depth = (
             self.profile_thk
             * (self.slot_clearance + self.taper_range / 2.0)
@@ -203,16 +237,25 @@ class Spec:
         # holder interface and are not ours to cut into.
         self.slot_depth = self.profile_thk
 
-        # ONE wall, not a side wall and an end wall. Both the profile and the
-        # slot are stadiums built on the same core segment - each is a uniform
-        # offset of the tenon - so the gap between them is the same everywhere,
-        # arcs included:
+        # ONE wall reported, not a side wall and an end wall - but it is no
+        # longer the same distance all round, because the length slack stretches
+        # the slot's core segment past the profile's:
         #
         #   prof_len_top - prof_wid_top = tenon_length - tenon_width
-        #   slot_len     - slot_wid     = tenon_length - tenon_width
+        #   slot_len     - slot_wid     = tenon_length - tenon_width + slack
         #
-        # Measured at the top face, the profile's smallest cross-section.
-        self.slot_wall = (self.prof_wid_top - self.slot_wid) / 2.0
+        # Along the flanks the gap is still (prof_wid_top - slot_wid)/2; past
+        # the profile's core segment it closes, reaching its minimum on the axis
+        # at the two ends, exactly slack/2 thinner. Report the governing one -
+        # the thinnest - rather than two near-identical numbers describing one
+        # piece of material:
+        #
+        #   end wall = (prof_len_top - slot_len)/2 = side wall - slack/2
+        #
+        # The tenon_length terms still cancel, so the wall remains independent
+        # of tenon length. Measured at the top face, the profile's smallest
+        # cross-section.
+        self.slot_wall = (self.prof_len_top - self.slot_len) / 2.0
 
         self._validate()
 
@@ -315,16 +358,22 @@ class Spec:
         """
         if self.slot_match_depth > self.profile_thk:
             self._warn(
-                f'The mortise this slot cuts is {self.slot_clearance:.4f}" oversize, '
-                f"which is more than the taper can add back to the tenon "
-                f'(+{self.taper_range / 2:.4f}" at most). The joint will stay '
-                f"loose. Reduce the slot clearance or widen the taper range."
+                f'The mortise this slot cuts is {self.slot_clearance:.4f}" oversize '
+                f"in width, which is more than the taper can add back to the "
+                f'tenon (+{self.taper_range / 2:.4f}" at most). The joint will '
+                f"stay loose across the cheeks. Reduce the slot clearance or "
+                f"widen the taper range."
             )
 
-        # One wall, so one message. It is the same distance at the sides, at
-        # the ends and around the arcs - see __post_init__.
+        # One wall, so one message: it is one piece of material, and this is its
+        # thinnest point - on the axis at the two ends. See __post_init__.
         if self.slot_wall <= C.MIN_SLOT_WALL_ERROR:
-            max_pin = self.prof_wid_top - 2 * C.MIN_SLOT_WALL_ERROR - self.slot_clearance
+            max_pin = (
+                self.prof_wid_top
+                - 2 * C.MIN_SLOT_WALL_ERROR
+                - self.slot_clearance
+                - self.slot_slack
+            )
             self._err(
                 f'A {self.slot_wid:.4f}" x {self.slot_len:.3f}" mortise slot '
                 f'leaves only {self.slot_wall:.3f}" of wall inside a '
@@ -336,10 +385,11 @@ class Spec:
             )
         elif self.slot_wall < C.MIN_SLOT_WALL_WARN:
             self._warn(
-                f'Mortise slot leaves {self.slot_wall:.3f}" of wall all round it. '
-                f"It prints, but the bearing rides the outside of that wall while "
-                f"the pin pushes the inside at the limit of every mortise. Treat "
-                f"the template gently and check the profile after a few joints."
+                f'Mortise slot leaves {self.slot_wall:.3f}" of wall at its '
+                f"thinnest, which is at the ends. It prints, but the bearing "
+                f"rides the outside of that wall while the pin pushes the inside "
+                f"at the limit of every mortise. Treat the template gently and "
+                f"check the profile after a few joints."
             )
 
     @property
@@ -426,6 +476,7 @@ class Spec:
             "slot_depth": self.slot_depth,
             "slot_wall": self.slot_wall,
             "slot_clearance": self.slot_clearance,
+            "slot_slack": self.slot_slack,
             "mortise_wid": self.mortise_wid,
             "mortise_len": self.mortise_len,
             "slot_match_depth": self.slot_match_depth,
