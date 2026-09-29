@@ -59,13 +59,34 @@ MID_THK = 0.125
 PROFILE_THK = 0.25
 
 # Total change in a tenon dimension from the base of the profile to its free
-# top face. Nominal sits at mid-depth, so the usable range is +/- half of this:
-# +/- 0.0275" on the tenon, over 0.250" of bearing travel.
+# top face, over 0.250" of bearing travel.
 #
-# Everything else about the taper falls out of this number: 6.28 deg of draft,
-# a 4.5:1 reduction, and 0.0227" of bearing travel per 0.005" of tenon. Change
+# Everything else about the taper falls out of this number: 7.97 deg of draft,
+# a 3.6:1 reduction, and 0.0179" of bearing travel per 0.005" of tenon. Change
 # it and all four have to be re-derived wherever they are quoted.
-TAPER_RANGE = 0.055
+TAPER_RANGE = 0.070
+
+# Where nominal sits in the profile, as a fraction of bearing depth measured
+# from the free top face. 0.5 is mid-depth and splits the range evenly; LOWER
+# values put nominal nearer the top and so leave MORE of the range on the
+# deep/oversize side, which is the side that gets used.
+#
+#   up from nominal   = TAPER_RANGE * (1 - NOMINAL_DEPTH_FRAC)   = 0.0467"
+#   down from nominal = TAPER_RANGE * NOMINAL_DEPTH_FRAC         = 0.0233"
+#
+# It is not 0.5 because the demand is not symmetric. Every known error pushes
+# the same way: the profile prints under (so the tenon starts under), and with
+# the slot in use the mortise is ALWAYS SLOT_CLEARANCE oversize, so the working
+# point is always above nominal and range below it is close to dead space.
+# Measured: at mid-depth and TAPER_RANGE 0.055 the bearing fully inserted left
+# only 0.0095" of fat to shave after those two - near enough to no headroom
+# that a printer running a few thou worse would arrive under size with nowhere
+# to go, which is the one unrecoverable failure here.
+#
+# Note this does NOT change the draft angle - that is TAPER_RANGE over
+# PROFILE_THK either way. It only moves which cross-section is labelled
+# nominal, so the extra headroom is free in control resolution.
+NOMINAL_DEPTH_FRAC = 1.0 / 3.0
 
 # ---------------------------------------------------------------------------
 # Mortise slot (optional) - design decisions
@@ -91,11 +112,29 @@ SLOT_CLEARANCE = 0.008
 # keeps the length from ever being the binding dimension, so the taper is left
 # to serve the thickness alone.
 #
-# It absorbs print error in the same stroke: a template that comes out a few
-# thou under cuts a correspondingly short mortise, and this is the margin that
-# swallows it. Raising it costs nothing but a slightly thinner wall at the two
-# ends of the slot.
-SLOT_LENGTH_SLACK = 0.010
+# This is a DEFAULT, not a constant - it is exposed as an input, because the
+# right value depends on the printer and on how hard the operator drives the
+# pin into the ends of the slot.
+#
+# Sized from a measurement, not a guess. A 1.750" tenon was set up with the
+# slack at 0.010"; the slot should have cut a 1.768" mortise and cut 1.740" -
+# a 0.028" deficit, of which 0.018" was asymmetric, i.e. the length was binding
+# 0.018" before the cheeks did and the operator was shaving that much thickness
+# off to get the tenon in. 0.040" covers that 0.018" and leaves ~0.012" of real
+# margin.
+#
+# Two mechanisms are known to feed it. The offset model assumes the pin reaches
+# the true axial ends of the slot, which needs it centred within
+# SLOT_CLEARANCE/2 at that instant; a pin driven along one side wall into the
+# end arc loses that much axial reach at each end, so up to SLOT_CLEARANCE of
+# mortise length goes missing by technique alone. The rest is the slot's end
+# arcs printing tight - a small inner radius pulls in where a straight wall
+# does not, which is why measuring the slot's WIDTH across the straights said
+# the pocket was fine when its length was not.
+#
+# Overshooting is cheap: a mortise that is long only has more end-grain gap,
+# which glues nothing anyway. It costs slack/2 of wall at the two ends.
+SLOT_LENGTH_SLACK = 0.040
 
 # Wall left between the slot and the guide edge. That wall works twice - the
 # bearing rides its outside cutting the tenon, the pin rides its inside cutting

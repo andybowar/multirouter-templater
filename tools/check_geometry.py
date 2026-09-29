@@ -11,6 +11,7 @@ Pure arithmetic - no build123d - so CI can run it on a bare Python.
 from __future__ import annotations
 
 import sys
+from math import atan, degrees
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -38,12 +39,59 @@ check("profile width at nominal", m.prof_wid_nom, 0.3750)
 check("profile length at nominal", m.prof_len_nom, 1.8750)
 check("tenon end radius follows the mortise", m.tenon_width / 2, 0.2500)
 
-print("taper endpoints bracket nominal - half of the 0.055\" default range")
-check("tenon delta, bearing flush", s.tenon_delta(0.0), -0.0275)
-check("tenon delta, fully inserted", s.tenon_delta(s.profile_thk), +0.0275)
-check("draft angle", s.draft_deg, 6.2773, tol=1e-3)
-check("reduction ratio", s.reduction_ratio, 4.5455, tol=1e-3)
-check("bearing travel per 0.005\" of tenon", s.travel_per_5thou, 0.022727, tol=1e-5)
+print("taper endpoints bracket nominal - 1/3 below, 2/3 above, of 0.070\"")
+check("tenon delta, bearing flush", s.tenon_delta(0.0), -0.070 / 3)
+check("tenon delta, fully inserted", s.tenon_delta(s.profile_thk), +2 * 0.070 / 3)
+check("tenon delta is zero at nominal depth", s.tenon_delta(s.nominal_depth), 0.0)
+check("nominal depth", s.nominal_depth, 0.0833333, tol=1e-6)
+check("range above nominal", s.taper_up, 0.0466667, tol=1e-6)
+check("range below nominal", s.taper_down, 0.0233333, tol=1e-6)
+check("up + down = the whole range", s.taper_up + s.taper_down, 0.070)
+# The draft angle is base-to-top over the profile depth, so moving nominal
+# inside the frustum must NOT change it. That is the whole reason the extra
+# headroom is free in control resolution - if this ever couples, the trade has
+# silently come back.
+check("draft angle", s.draft_deg, 7.9696, tol=1e-3)
+check("reduction ratio", s.reduction_ratio, 3.5714, tol=1e-3)
+check("bearing travel per 0.005\" of tenon", s.travel_per_5thou, 0.017857, tol=1e-5)
+off_centre = Spec(bit_dia=0.5, tenon_width=0.5, tenon_length=2.0)
+check("draft is independent of where nominal sits",
+      off_centre.draft_deg,
+      degrees(atan(off_centre.taper_range / 2.0 / off_centre.profile_thk)),
+      tol=1e-12)
+
+# Nominal no longer lands on a sixteenth, so the table has to carry it as its
+# own row or the marker vanishes while every number still looks right.
+rows = s.adjustment_table()
+nom = [r for r in rows if r["is_nominal"]]
+start = [r for r in rows if r["is_start"]]
+if len(nom) == 1 and abs(nom[0]["depth"] - s.nominal_depth) < 1e-9:
+    print("  ok    adjustment table carries exactly one nominal row, at 0.083\"")
+else:
+    print(f"  FAIL  {len(nom)} nominal rows in the adjustment table")
+    FAILURES.append("adjustment table nominal row")
+if len(start) == 1 and abs(start[0]["depth"] - s.profile_thk) < 1e-9:
+    print("  ok    ...and START HERE is still the deepest row")
+else:
+    print(f"  FAIL  START HERE is not the deepest row")
+    FAILURES.append("adjustment table start row")
+if rows == sorted(rows, key=lambda r: r["depth"]):
+    print("  ok    ...and the rows are still in depth order")
+else:
+    print("  FAIL  adjustment table rows out of order")
+    FAILURES.append("adjustment table order")
+
+# The headroom this was raised for: at full insertion, after the profile prints
+# 0.010" under and the slot cuts a mortise SLOT_CLEARANCE oversize, there has to
+# be fat left to shave. It was 0.0095" before and that was too thin to trust.
+PRINT_UNDER = 0.010
+headroom = s.taper_up - PRINT_UNDER - s.slot_clearance
+if headroom > 0.025:
+    print(f"  ok    {headroom:.4f}\" of fat left at full insertion after a "
+          f"{PRINT_UNDER:.3f}\" print error and the slot's clearance")
+else:
+    print(f"  FAIL  only {headroom:.4f}\" of headroom at full insertion")
+    FAILURES.append("insufficient upward headroom")
 
 print("mortise slot - the slot IS the guide, so it is the pin's swept path")
 ms = Spec(bit_dia=0.5, tenon_width=0.5, tenon_length=2.0, mortise_slot=True)
@@ -55,8 +103,8 @@ check("slot width = pin + clearance", ms.slot_wid, 0.1920 + CLR)
 check("slot length = (L - W) + pin + clearance + slack",
       ms.slot_len, 1.5 + 0.1920 + CLR + SLACK)
 check("slot sunk through the profile only", ms.slot_depth, 0.2500)
-#   end wall = (prof_len_top - slot_len)/2 = (2.0975 - 1.7100)/2
-check("slot leaves wall in the profile", ms.slot_wall, 0.19375, tol=1e-4)
+#   end wall = (prof_len_top - slot_len)/2 = (2.10167 - 1.74000)/2
+check("slot leaves wall in the profile", ms.slot_wall, 0.180833, tol=1e-5)
 # The slack stretches the slot's core segment past the profile's, so the wall is
 # no longer uniform. One number is still reported, and it must be the governing
 # one - the thinnest, on the axis at the two ends.
@@ -101,6 +149,30 @@ else:
     print(f"  FAIL  length still binding at the width's fit point")
     FAILURES.append("length binds before width")
 
+# ...and it has to survive the real world, not just the model. A 1.750" tenon
+# measured 0.028" of mortise-length deficit against prediction, 0.018" of it
+# asymmetric. The default slack must still leave the width binding last after
+# losing that much.
+MEASURED_ASYM_LOSS = 0.018
+if SLACK - MEASURED_ASYM_LOSS > 0:
+    print(f"  ok    survives the measured {MEASURED_ASYM_LOSS:.3f}\" asymmetric loss "
+          f"with {SLACK - MEASURED_ASYM_LOSS:.3f}\" to spare")
+else:
+    print(f"  FAIL  {SLACK:.3f}\" of slack does not cover a measured "
+          f"{MEASURED_ASYM_LOSS:.3f}\" loss")
+    FAILURES.append("slack under measured loss")
+
+# The slack is an input now, and zero is a legal value for it - the one input
+# where it is, because it is a margin rather than a size.
+none = Spec(bit_dia=0.5, tenon_width=0.5, tenon_length=2.0, mortise_slot=True,
+            slot_slack=0.0)
+check("slack=0 reverts to a uniform offset", none.slot_len - none.slot_wid, 1.5000)
+check("...and a uniformly oversize mortise",
+      none.mortise_len - 2.0, none.mortise_wid - 0.5)
+check("slack is honoured as an input",
+      Spec(bit_dia=0.5, tenon_width=0.5, tenon_length=2.0,
+           mortise_slot=True, slot_slack=0.02).mortise_len, 2.0 + CLR + 0.02)
+
 print("mortise slot - refuses to eat the guide profile")
 narrow = Spec(bit_dia=0.2, tenon_width=0.5, tenon_length=2.0, mortise_slot=True)
 if any("mortise slot" in e.lower() for e in narrow.errors):
@@ -117,7 +189,8 @@ else:
     FAILURES.append("slot error leak")
 
 print("input bounds are enforced")
-for bad in ({"bit_dia": 0}, {"tenon_width": -1}, {"taper_range": 9}):
+for bad in ({"bit_dia": 0}, {"tenon_width": -1}, {"taper_range": 9},
+            {"slot_slack": -0.01}, {"slot_slack": 9}):
     values = {"bit_dia": 0.5, "tenon_width": 0.5, "tenon_length": 2.0, **bad}
     try:
         spec_from_inputs(values)

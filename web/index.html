@@ -415,12 +415,25 @@
             <label for="pin">Stylus pin diameter (stepped end)</label>
             <input type="text" id="pin" value="0.192" class="num" autocomplete="off">
             <div class="hint">Measured on the machine. Sets the mortise slot width; the
-              slot's <em>length</em> is computed, and carries a little extra slack so the
-              mortise is never tight end to end.</div>
+              slot's <em>length</em> is computed, and carries extra slack so the mortise is
+              never tight end to end.</div>
+          </div>
+          <div class="field">
+            <label for="slack">Mortise slot length slack</label>
+            <input type="text" id="slack" value="0.040" class="num" autocomplete="off">
+            <div class="hint">How much longer than nominal the slot cuts the mortise, on
+              top of the pin's fit clearance. It only has to beat the mortise's
+              <em>width</em> error: the joint is glued on the cheeks, so the length must
+              never be what binds. <strong>Tune it from a cut mortise</strong> &mdash;
+              measure one, and if it came out shorter than the figure below, add the
+              difference here. Overshooting costs nothing but end-grain gap.</div>
           </div>
           <div class="field">
             <label for="taper">Taper range (total, base to top)</label>
-            <input type="text" id="taper" value="0.055" class="num" autocomplete="off">
+            <input type="text" id="taper" value="0.070" class="num" autocomplete="off">
+            <div class="hint">Nominal is not in the middle of this. Two thirds sits on the
+              oversize side, because that is the side you work in: the profile prints a
+              touch under and a mortise cut from the slot is always oversize.</div>
           </div>
           <div class="field">
             <label for="pthk">Guide profile depth</label>
@@ -548,7 +561,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-const INPUTS = ["bit", "wid", "len", "stylus", "taper", "pthk", "pin"];
+const INPUTS = ["bit", "wid", "len", "stylus", "taper", "pthk", "pin", "slack"];
 let state = null;
 
 /* Three levels of capability, and the whole point of the split is that level 1
@@ -707,6 +720,7 @@ function payload() {
     taper_range: parseLen($("taper").value),
     profile_thk: parseLen($("pthk").value),
     pin_dia: parseLen($("pin").value),
+    slot_slack: parseLen($("slack").value),
     mortise_slot: $("mslot").checked,
     engrave: $("engrave").checked,
   };
@@ -821,8 +835,8 @@ function render() {
      has already been bitten once by prose that stopped matching the code. */
   $("htStart").innerHTML =
     ` &mdash; ${f4(d.profile_thk)} of bearing depth, which cuts ` +
-    `${f4(d.tenon_width + d.taper_range / 2)} &times; ${f4(d.tenon_length + d.taper_range / 2)}`;
-  $("htNominal").textContent = `, ${f4(d.profile_thk / 2)} in`;
+    `${f4(d.tenon_width + d.taper_up)} &times; ${f4(d.tenon_length + d.taper_up)}`;
+  $("htNominal").textContent = `, ${f4(d.nominal_depth)} in`;
   $("htBase").innerHTML =
     `; it should read ${f4(d.prof_wid_base)} &times; ${f4(d.prof_len_base)}`;
   $("htSlot").hidden = !d.mortise_slot;
@@ -838,7 +852,7 @@ function render() {
       `it could bind first you would shave the tenon to get it in end to end and lose ` +
       `the same thickness doing it. So the tenon wants to finish near ` +
       `<strong>${f4(d.slot_match_depth)}</strong> of bearing depth rather than the ` +
-      `${f4(d.profile_thk / 2)} nominal &mdash; still start fully in and creep down to it.`;
+      `${f4(d.nominal_depth)} nominal &mdash; still start fully in and creep down to it.`;
   }
 
   $("tableBody").innerHTML = table.map((r) => `

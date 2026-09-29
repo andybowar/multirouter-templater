@@ -95,10 +95,10 @@ The taper adjusts the tenon by a *uniform* offset: both dimensions move by the
 same delta. That means whichever dimension binds first sets the tenon, and the
 other one just follows. If the mortise were the same amount oversize in both,
 the length would bind at the same moment as the thickness - and any error
-anywhere in the chain (a template that printed a few thou small, a bit running
-a shade under) would make it bind FIRST, so the operator would shave the tenon
-to get it in length-wise and give up the identical amount of thickness to do
-it. That trades the dimension the joint is glued on for the one it is not.
+anywhere in the chain (a bit running a shade under, deflection, the pin
+wandering its fit) would make it bind FIRST, so the operator would shave the
+tenon to get it in length-wise and give up the identical amount of thickness to
+do it. That trades the dimension the joint is glued on for the one it is not.
 
 Slack in the length takes the length out of the contest. It can never be the
 binding dimension, so the bearing depth is free to serve the thickness alone:
@@ -140,6 +140,10 @@ class Spec:
     profile_thk: float = C.PROFILE_THK
     mortise_slot: bool = False  # cut the guide slot for the stepped stylus pin
     pin_dia: float = C.STYLUS_PIN_DIA
+    # Extra slot length, beyond the pin's fit clearance. An input rather than a
+    # constant: the right value depends on the printer's inner arcs and on how
+    # hard the pin is driven into the ends of the slot. See the docstring.
+    slot_slack: float = C.SLOT_LENGTH_SLACK
 
     # --- derived ----------------------------------------------------------
     offset: float = field(init=False)
@@ -149,6 +153,9 @@ class Spec:
     prof_wid_base: float = field(init=False)
     prof_len_top: float = field(init=False)
     prof_wid_top: float = field(init=False)
+    taper_up: float = field(init=False)
+    taper_down: float = field(init=False)
+    nominal_depth: float = field(init=False)
     draft_deg: float = field(init=False)
     travel_per_5thou: float = field(init=False)
     reduction_ratio: float = field(init=False)
@@ -165,7 +172,6 @@ class Spec:
     slot_depth: float = field(init=False)
     slot_wall: float = field(init=False)
     slot_clearance: float = field(init=False)
-    slot_slack: float = field(init=False)
     mortise_wid: float = field(init=False)
     mortise_len: float = field(init=False)
     slot_match_depth: float = field(init=False)
@@ -185,16 +191,24 @@ class Spec:
         self.prof_len_nom = self.tenon_length + self.offset
         self.prof_wid_nom = self.tenon_width + self.offset
 
-        # Nominal sits at mid-depth so the operator can adjust either way from
-        # a test cut.
-        half = self.taper_range / 2.0
-        self.prof_len_base = self.prof_len_nom + half
-        self.prof_wid_base = self.prof_wid_nom + half
-        self.prof_len_top = self.prof_len_nom - half
-        self.prof_wid_top = self.prof_wid_nom - half
+        # Nominal is deliberately NOT at mid-depth - it sits at
+        # NOMINAL_DEPTH_FRAC of the way in from the free top face, which leaves
+        # two thirds of the range on the oversize side. Every known error runs
+        # the same way (the profile prints under, and the slot's mortise is
+        # always SLOT_CLEARANCE oversize), so that is the side that gets used.
+        # See config.NOMINAL_DEPTH_FRAC.
+        self.nominal_depth = self.profile_thk * C.NOMINAL_DEPTH_FRAC
+        self.taper_up = self.taper_range * (1.0 - C.NOMINAL_DEPTH_FRAC)
+        self.taper_down = self.taper_range * C.NOMINAL_DEPTH_FRAC
+        self.prof_len_base = self.prof_len_nom + self.taper_up
+        self.prof_wid_base = self.prof_wid_nom + self.taper_up
+        self.prof_len_top = self.prof_len_nom - self.taper_down
+        self.prof_wid_top = self.prof_wid_nom - self.taper_down
 
-        # Per-side rise over the profile depth.
-        self.draft_deg = degrees(atan(half / self.profile_thk))
+        # Per-side rise over the profile depth. Base to top is the whole range
+        # however it is split about nominal, so the draft angle does not depend
+        # on where nominal sits.
+        self.draft_deg = degrees(atan(self.taper_range / 2.0 / self.profile_thk))
 
         self.travel_per_5thou = 0.005 / self.taper_range * self.profile_thk
         self.reduction_ratio = self.profile_thk / self.taper_range
@@ -211,7 +225,6 @@ class Spec:
         # free to serve; the length is deliberately made slack so it can never
         # bind first and drag the width down with it.
         self.slot_clearance = C.SLOT_CLEARANCE
-        self.slot_slack = C.SLOT_LENGTH_SLACK
         self.slot_wid = self.pin_dia + self.slot_clearance
         self.slot_len = (
             self.tenon_length
@@ -227,11 +240,10 @@ class Spec:
         self.mortise_wid = self.tenon_width + self.slot_clearance
         self.mortise_len = self.tenon_length + self.slot_clearance + self.slot_slack
         # Bearing depth that grows the tenon to meet the mortise WIDTH. The
-        # length looks after itself - it is slack by construction.
-        self.slot_match_depth = (
-            self.profile_thk
-            * (self.slot_clearance + self.taper_range / 2.0)
-            / self.taper_range
+        # length looks after itself - it is slack by construction. This is
+        # tenon_delta() solved for depth, so it follows nominal's position.
+        self.slot_match_depth = self.profile_thk * (
+            self.slot_clearance / self.taper_range + C.NOMINAL_DEPTH_FRAC
         )
         # Sunk through the profile layer and no further: layers 1 and 2 are the
         # holder interface and are not ours to cut into.
@@ -317,7 +329,7 @@ class Spec:
             )
 
         if self.prof_len_base > self.base_len:
-            max_tenon = self.base_len - self.offset - self.taper_range / 2
+            max_tenon = self.base_len - self.offset - self.taper_up
             self._err(
                 f'Guide profile would be {self.prof_len_base:.3f}" long, which '
                 f'overhangs the {self.base_len:.3f}" base plate. Maximum tenon '
@@ -334,10 +346,7 @@ class Spec:
 
         if self.prof_wid_base > self.mid_len or self.prof_wid_base > self.mid_wid:
             max_bit = (
-                self.mid_wid
-                - self.tenon_width
-                + self.stylus_dia
-                - self.taper_range / 2
+                self.mid_wid - self.tenon_width + self.stylus_dia - self.taper_up
             )
             self._err(
                 f'Guide profile would be {self.prof_wid_base:.3f}" wide, which '
@@ -360,7 +369,7 @@ class Spec:
             self._warn(
                 f'The mortise this slot cuts is {self.slot_clearance:.4f}" oversize '
                 f"in width, which is more than the taper can add back to the "
-                f'tenon (+{self.taper_range / 2:.4f}" at most). The joint will '
+                f'tenon (+{self.taper_up:.4f}" at most). The joint will '
                 f"stay loose across the cheeks. Reduce the slot clearance or "
                 f"widen the taper range."
             )
@@ -414,7 +423,7 @@ class Spec:
         `profile_thk` is fully inserted to the profile base.
         """
         frac = bearing_depth / self.profile_thk
-        return -self.taper_range / 2.0 + frac * self.taper_range
+        return self.taper_range * (frac - C.NOMINAL_DEPTH_FRAC)
 
     def adjustment_table(self, steps: int = 4) -> list[dict]:
         """Bearing depth -> tenon size.
@@ -425,13 +434,24 @@ class Spec:
         removes wood. Starting at nominal risks a tenon that comes out under
         size, and there is no way back from that.
         """
+        depths = [self.profile_thk * i / steps for i in range(steps + 1)]
+
+        # Nominal used to fall on a step for free, because it sat at mid-depth
+        # and mid-depth of a quarter inch is an eighth. It no longer does -
+        # NOMINAL_DEPTH_FRAC is 1/3 - so insert it, or `is_nominal` never fires
+        # and the row quietly disappears from the table while every number in
+        # it still looks right.
+        if not any(abs(d - self.nominal_depth) < 1e-9 for d in depths):
+            depths.append(self.nominal_depth)
+        depths.sort()
+
+        deepest = depths[-1]
         rows = []
-        for i in range(steps + 1):
-            depth = self.profile_thk * i / steps
+        for depth in depths:
             delta = self.tenon_delta(depth)
             rows.append(
                 {
-                    "is_start": i == steps,
+                    "is_start": abs(depth - deepest) < 1e-9,
                     "depth": depth,
                     "depth_label": _frac_label(depth),
                     "delta": delta,
@@ -458,6 +478,9 @@ class Spec:
             "prof_wid_top": self.prof_wid_top,
             "draft_deg": self.draft_deg,
             "taper_range": self.taper_range,
+            "taper_up": self.taper_up,
+            "taper_down": self.taper_down,
+            "nominal_depth": self.nominal_depth,
             "profile_thk": self.profile_thk,
             "travel_per_5thou": self.travel_per_5thou,
             "reduction_ratio": self.reduction_ratio,
@@ -494,7 +517,15 @@ INPUT_BOUNDS: dict[str, tuple[float, float]] = {
     "taper_range": (0.0, 0.25),
     "profile_thk": (0.0, 2.0),
     "pin_dia": (0.0, 1.0),
+    "slot_slack": (0.0, 0.25),
 }
+
+# The low bound is exclusive for everything above, because every one of them is
+# a diameter or a thickness and a zero is nonsense. `slot_slack` is the one
+# input that is a margin rather than a size, so zero is a real setting - it
+# means "no slack", which is what the app used to do and what #4 in CLAUDE.md
+# explains is a bad idea. Allow it and let the geometry speak for itself.
+ZERO_ALLOWED: frozenset[str] = frozenset({"slot_slack"})
 
 
 def spec_from_inputs(values: dict) -> Spec:
@@ -509,9 +540,11 @@ def spec_from_inputs(values: dict) -> Spec:
             raise ValueError(f"{name} is not a number") from None
         if not v == v or v in (float("inf"), float("-inf")):
             raise ValueError(f"{name} is not a number")
-        if not low < v <= high:
+        low_ok = v >= low if name in ZERO_ALLOWED else v > low
+        if not (low_ok and v <= high):
+            floor = "at least" if name in ZERO_ALLOWED else "greater than"
             raise ValueError(
-                f'{name} must be greater than {low:g}" and at most {high:g}", '
+                f'{name} must be {floor} {low:g}" and at most {high:g}", '
                 f'got {v:g}"'
             )
         kwargs[name] = v

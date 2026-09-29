@@ -124,13 +124,43 @@ surrender the identical amount of thickness doing it — paying with the only
 dimension that carries the joint. The slack takes the length out of the
 contest, so `slot_match_depth` serves the width alone.
 
-This is also what absorbs print error: a template that comes out a few thou
-under cuts a correspondingly short mortise, and the margin swallows it instead
-of the thickness paying for it. **With the printed error the user measured
-(~0.010") the 0.010" slack is roughly break-even, not surplus** — the real fix
-for that is slicer XY compensation, not more slack here. Raising
-`SLOT_LENGTH_SLACK` costs nothing but `slack/2` of wall at the two ends of the
-slot.
+**The value is measured, and the first two guesses were both too small.** A
+1.750" tenon was set up with the slack at 0.010". The slot should have cut a
+1.768" mortise; it cut **1.740"**. Decompose that, because the two numbers pull
+in different directions:
+
+```
+deficit = predicted - actual         = 1.768 - 1.740 = 0.028"   harmless alone
+gap     = (mort_len - L) - (mort_wid - W)
+        = (1.740 - 1.750) - 0.008    = -0.018"                  the real problem
+```
+
+The **deficit** is how short the mortise is; a mortising bit under nominal
+lands here and shortens the width equally, so the taper absorbs it. The **gap**
+is how much earlier the length binds than the width, and it is the only thing
+that costs thickness. At −0.018" the operator was shaving 0.018" off the cheeks
+to get the tenon in end to end. The default is now **0.040"**, which covers
+that with ~0.012" to spare, and it is an **input** — `Spec.slot_slack`, exposed
+in the page's Machine constants — because the right value is per printer and
+per technique.
+
+Two mechanisms are known to feed the gap, and neither is print shrinkage:
+
+1. **Technique.** The offset model assumes the pin reaches the true axial ends
+   of the slot, which requires it centred within `SLOT_CLEARANCE/2` at that
+   instant. A pin driven along one side wall into the end arc gives up that
+   much axial reach at *each* end, so up to `SLOT_CLEARANCE` of mortise length
+   goes missing before anything is even printed.
+2. **The slot's end arcs print tight.** A small inner radius pulls in where a
+   straight wall does not. This is why measuring the slot's *width* across the
+   straights said 0.200", dead nominal, while its length was not — the
+   straight-wall measurement cannot see it.
+
+So do **not** justify the slack by contour print error (the pocket takes no
+contour offset on this printer — see State of validation), and do not assume a
+true-measuring slot width means a true-measuring slot length. Overshooting is
+cheap: a long mortise is more end-grain gap, which glues nothing anyway. It
+costs `slack/2` of wall at the two ends.
 
 This has now been wrong in both directions, so be careful before you "fix" it:
 an early revision clearanced the width alone (right only while the slot set
@@ -154,28 +184,68 @@ silently** — the project brief explicitly required that.
 | layer 1 | 3.500 × 1.000 × 0.250" | factory template, rectangle |
 | layer 2 | 3.250 × 0.750 × 0.125" | factory template, stadium |
 | layer 3 | 0.250" thick | design decision — hosts the taper |
-| `TAPER_RANGE` | 0.055" total | design decision |
+| `TAPER_RANGE` | 0.070" total | design decision |
+| `NOMINAL_DEPTH_FRAC` | 1/3 | design decision — see below |
 | `SLOT_CLEARANCE` | 0.008" | design decision — pin slip fit |
-| `SLOT_LENGTH_SLACK` | 0.010" | design decision — see #4 |
+| `SLOT_LENGTH_SLACK` | 0.040" **default** | measured off a cut mortise — see #4 |
 
 Layers 1 and 2 are the holder interface and are **fixed**. Only layer 3 is
 computed. Overall thickness is 0.625"; the factory template is 0.500".
 
-Taper defaults give **±0.0275" of tenon over 0.250" of bearing travel**: 6.28°
-of draft as `draft_deg` reports it, a 4.55:1 reduction, and 0.0227" of bearing
-travel per 0.005" of tenon.
+Taper defaults give **+0.0467" / −0.0233" of tenon over 0.250" of bearing
+travel**: 7.97° of draft as `draft_deg` reports it, a 3.57:1 reduction, and
+0.0179" of bearing travel per 0.005" of tenon.
 
-Nominal sits at mid-depth, but **the operator is told to start fully
-inserted**, at the widest part of the profile — `is_start` in
-`adjustment_table()`. Wood only comes off: a tenon that is still fat can be
-recut, one that has gone under size is scrap. So the workflow creeps *down*
-onto the fit and nominal is a reference point, not a starting point. Earlier
-revisions told the operator to begin at nominal; that was wrong and it is the
-kind of advice that reads as harmless. Do not put it back.
+### Nominal is not at mid-depth
 
-`TAPER_RANGE` has been raised three times — 0.020" to 0.040" in `6abdf75`, then
-to 0.045", then to 0.055" once a printed template came out ~0.010" under and
-the range had to absorb it. **Every one of the figures above is derived from
+`NOMINAL_DEPTH_FRAC = 1/3`, so two thirds of the range sits on the oversize
+side. The split is not cosmetic — it is the answer to a measured problem, and
+it is free.
+
+**Why off-centre.** Every known error pushes the same way. The profile prints
+~0.010" under, and with the slot in use the mortise is *always*
+`SLOT_CLEARANCE` oversize, so the tenon must always finish above nominal —
+`slot_match_depth` is never less than `nominal_depth`. Range below nominal is
+close to dead space for that workflow. At mid-depth with `TAPER_RANGE` 0.055"
+the bearing fully inserted left only `0.0275 − 0.010 − 0.008 = 0.0095"` of fat
+to shave, which the user hit in practice. A printer running a few thou worse
+arrives at the widest cross-section already *under* the mortise, with nowhere
+left to go — the one unrecoverable failure mode this design has, because the
+base of the profile is a hard stop.
+
+**Why it costs nothing.** The draft angle is `TAPER_RANGE / PROFILE_THK`
+base-to-top, whatever the split. Moving nominal inside the frustum relabels
+which cross-section is "as requested"; it does not change the slope, the
+reduction ratio, or the travel per 0.005". `check_geometry.py` asserts that
+independence — if a refactor ever couples them, the trade has silently come
+back.
+
+**What it broke, once.** Nominal used to land on a table step for free, because
+mid-depth of 0.250" is an eighth. One third of 0.250" is not a sixteenth, so
+`is_nominal` stopped firing and the nominal row quietly vanished from the
+adjustment table while every number still in it looked correct.
+`adjustment_table()` now inserts the nominal depth as its own row and sorts;
+`check_geometry.py` asserts exactly one nominal row, `is_start` still deepest,
+and rows in depth order.
+
+**Do not derive this from the PantoRouter.** Their 5–6° draft is on a *2:1*
+pantograph, which halves the template's movement on the way to the bit. The
+same angle on a 1:1 machine produces twice the tenon change, so the equivalent
+here is 2.5–3°, not 10–12°. The taper was raised anyway, but on an error budget
+— the analogy points the wrong way and doubling it is the wrong instinct.
+
+**The operator is still told to start fully inserted**, at the widest part of
+the profile — `is_start` in `adjustment_table()`. Wood only comes off: a tenon
+that is still fat can be recut, one that has gone under size is scrap. So the
+workflow creeps *down* onto the fit and nominal is a reference point, not a
+starting point. Earlier revisions told the operator to begin at nominal; that
+was wrong and it is the kind of advice that reads as harmless. Do not put it
+back.
+
+`TAPER_RANGE` has been raised four times — 0.020" to 0.040" in `6abdf75`, then
+0.045", then 0.055" once a printed template came out ~0.010" under, then 0.070"
+alongside the off-centre nominal when 0.055" still left the bearing nearly out
+of headroom at full insertion. **Every one of the figures above is derived from
 it**, so raising it again means re-deriving the draft angle, the reduction
 ratio, the travel per 0.005", the profile-at-base dimension quoted in the
 README, the default in the `taper` input in `index.html`, and the expected
@@ -184,6 +254,11 @@ left this file and the README stating half the real numbers for a while; don't
 repeat that. `check_geometry.py` now asserts the draft angle, the reduction
 ratio and the travel per 0.005" directly, so a bare constant change fails
 loudly instead of quietly.
+
+Note the two knobs do different jobs and should not be conflated.
+`TAPER_RANGE` buys range *and* spends control resolution; `NOMINAL_DEPTH_FRAC`
+buys headroom on one side for free, by taking it from the other. If the
+complaint is "not enough room at full insertion", reach for the fraction first.
 
 ## The mortise slot
 
@@ -497,17 +572,35 @@ Verified in software: the factory calibration point, cross-sections at multiple
 heights (including mismatched bits), STL watertightness, engraving mirroring,
 every validation error path, and the frontend render logic.
 
-**One template has now been printed and used.** It came out roughly 0.010"
-under on every dimension. That is an offset, not shrinkage — shrinkage is
-proportional, and a flat 0.010" across a 0.625" width and a 3.500" base plate
-is not — so it points at extrusion width / flow or a negative XY size
-compensation in the slicer, and it belongs in the slicer, not in `config.py`.
-Two changes came out of that print: `TAPER_RANGE` went to 0.055" so the range
-can absorb it, and `SLOT_LENGTH_SLACK` exists so the error lands in the
-mortise's length instead of its thickness (see #4).
+**One template has now been printed and measured.** Two numbers off it, and
+they do not agree with each other — which is the informative part:
 
-Still open from that print: whether the slot **width** printed under too. At
-0.200" nominal it only has 0.008" to give before a 0.1920" pin binds.
+| Feature | Nominal | Printed |
+|---|---|---|
+| outside dimensions (profile, plates) | — | **−0.010"** |
+| mortise slot width (a pocket) | 0.200" | **0.200", dead on** |
+
+Not shrinkage. Shrinkage is proportional, and a flat 0.010" across a 0.625"
+profile width and a 3.500" base plate is not. It is a **contour** offset —
+extrusion width / flow, or a negative XY size compensation — and it lands on
+outside walls only. The pocket came out true, so the slot, the pin fit and the
+mortise the slot cuts are all unaffected.
+
+`TAPER_RANGE` went to 0.055" because of this: the profile is what runs under,
+so the tenon runs under with it, and the range has to add it back.
+`SLOT_LENGTH_SLACK` is **not** from this print — see #4.
+
+A second template, cut with that 0.055" taper and 0.010" of slack, then gave
+the mortise measurement in #4: a 1.750" tenon's mortise came out 1.740" against
+a predicted 1.768". That is what set the slack to 0.040" and made it an input.
+**Both prints agree that outside dimensions run ~0.010" under; neither has
+produced a joint that closes yet.**
+
+The correction belongs in the slicer, not in `config.py`, and it must be
+**contour-only**. Orca/Bambu split this into *X-Y contour compensation* and
+*X-Y hole compensation*; only the first should move. A global XY size
+compensation would grow the slot along with the outside, and every thou there
+comes straight back out as an oversize mortise, eating the taper for nothing.
 
 The math is otherwise verified only in software. Reproducing the factory
 template is a strong calibration point, not proof, and no joint cut from this
@@ -518,8 +611,8 @@ calipers before trusting it.
 
 - The part is 0.625" thick against the factory 0.500", so the bearing bracket
   needs 0.125" more protrusion than the user is used to.
-- Bearing protrusion is currently set "by feel". At 4.55:1 that is survivable —
-  0.010" of slop in the setting is 0.0022" on the tenon — but a caliper reading
+- Bearing protrusion is currently set "by feel". At 3.57:1 that is survivable —
+  0.010" of slop in the setting is 0.0028" on the tenon — but a caliper reading
   against a flat reference face on the bracket would make the adjustment table
   exact rather than advisory.
 - When the profile is narrower than layer 2 (0.750"), over-inserting the
