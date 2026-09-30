@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.geometry import Spec, spec_from_inputs  # noqa: E402
+from app.geometry import Spec, dim_label, file_stem, spec_from_inputs  # noqa: E402
 
 FAILURES: list[str] = []
 
@@ -187,6 +187,43 @@ if not any("mortise slot" in e.lower() for e in off.errors):
 else:
     print("  FAIL  slot errors leak into an unslotted template")
     FAILURES.append("slot error leak")
+
+print("dimension labels do not lie about the input")
+# 1.1875 is 1-3/16" - an ordinary tenon length. At three decimals it renders
+# "1.188", a different number, which reads as the app having changed the input.
+for value, want in ((1.1875, "1.1875"), (0.5, "0.500"), (2.0, "2.000"),
+                    (2.125, "2.125"), (1.03125, "1.03125"), (0.0625, "0.0625"),
+                    (10.0, "10.000"), (-0.125, "-0.125")):
+    got = dim_label(value)
+    if got == want:
+        print(f"  ok    {value!r} -> {got}")
+    else:
+        print(f"  FAIL  {value!r} -> {got}, want {want}")
+        FAILURES.append(f"dim_label {value}")
+
+# The filename is the one place rounding is worse than cosmetic: two different
+# templates sharing a name land on top of each other in the downloads folder.
+# The pairs that matter are shop fractions against their three-decimal
+# roundings, which is what actually collided. Five decimals is the resolution
+# by design - values closer together than that are not different templates.
+near = [1.1875, 1.188, 1.21875, 1.219, 1.03125, 1.031]
+stems = {file_stem(Spec(bit_dia=0.5, tenon_width=0.5, tenon_length=L))
+         for L in near}
+if len(stems) == len(near):
+    print(f"  ok    {len(near)} fractions and their roundings give "
+          f"{len(stems)} distinct filenames")
+else:
+    print(f"  FAIL  filename collision among {near}: {sorted(stems)}")
+    FAILURES.append("file_stem collision")
+
+# Round values must keep their old three-decimal form, or every existing
+# filename churns for no reason.
+check_stem = file_stem(Spec(bit_dia=0.5, tenon_width=0.5, tenon_length=2.0))
+if check_stem == "multirouter_tenon_0p500x2p000_bit0p500":
+    print("  ok    round values keep their existing filename")
+else:
+    print(f"  FAIL  filename churned: {check_stem}")
+    FAILURES.append("file_stem churn")
 
 print("input bounds are enforced")
 for bad in ({"bit_dia": 0}, {"tenon_width": -1}, {"taper_range": 9},

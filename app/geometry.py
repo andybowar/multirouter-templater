@@ -294,8 +294,8 @@ class Spec:
         # downstream fit-and-clearance advice is just noise.
         if self.tenon_length <= self.tenon_width:
             self._err(
-                f'Tenon length ({self.tenon_length:.3f}") must be greater than '
-                f'tenon width ({self.tenon_width:.3f}"). A tenon is a slot, '
+                f'Tenon length ({dim_label(self.tenon_length)}") must be greater '
+                f'than tenon width ({dim_label(self.tenon_width)}"). A tenon is a slot, '
                 f"not a circle."
             )
             return
@@ -334,7 +334,7 @@ class Spec:
                 f'Guide profile would be {self.prof_len_base:.3f}" long, which '
                 f'overhangs the {self.base_len:.3f}" base plate. Maximum tenon '
                 f'length for this bit is '
-                f'{max_tenon:.3f}".'
+                f'{dim_label(max_tenon)}".'
             )
             return
         elif self.prof_len_base > self.mid_len:
@@ -351,7 +351,7 @@ class Spec:
             self._err(
                 f'Guide profile would be {self.prof_wid_base:.3f}" wide, which '
                 f'overhangs the {self.mid_wid:.3f}" middle layer. With a '
-                f'{self.tenon_width:.3f}" tenon the bit must stay under '
+                f'{dim_label(self.tenon_width)}" tenon the bit must stay under '
                 f'{max_bit:.4f}".'
             )
             return
@@ -572,6 +572,27 @@ _SIXTEENTHS = {
 }
 
 
+def dim_label(x: float) -> str:
+    """A length rendered so the user recognises the number they typed.
+
+    Up to five decimals, trailing zeros trimmed, never fewer than three.
+
+    Three alone is not enough, and the failure is quiet. 1.1875" is 1-3/16",
+    a dimension anyone might type; `:.3f` renders it "1.188", which is a
+    DIFFERENT number. On screen it reads as the app having silently changed the
+    input. In `file_stem` it is worse than cosmetic: 1.1875 and 1.188 collide
+    on one filename, so two different templates land on top of each other in
+    the downloads folder - the same failure the `_mslot` suffix exists to
+    prevent.
+
+    Five covers every shop fraction down to a thirty-second exactly (1/32 =
+    0.03125), and round values keep their old three-decimal form, so existing
+    filenames do not churn.
+    """
+    whole, _, frac = f"{x:.5f}".rstrip("0").partition(".")
+    return f"{whole}.{frac.ljust(3, '0')}"
+
+
 def _frac_label(x: float) -> str:
     """Render a depth as a shop fraction when it lands on a sixteenth."""
     sixteenths = x * 16.0
@@ -585,8 +606,11 @@ def file_stem(spec: Spec) -> str:
     # The slot changes the part, so it has to change the filename - otherwise
     # two different templates for the same tenon land on top of each other in
     # the downloads folder.
+    # dim_label, not :.3f - three decimals makes 1.1875 and 1.188 the same
+    # file, which is exactly the collision this function is trying to avoid.
     suffix = "_mslot" if spec.mortise_slot else ""
     return (
-        f"multirouter_tenon_{spec.tenon_width:.3f}x{spec.tenon_length:.3f}"
-        f"_bit{spec.bit_dia:.3f}".replace(".", "p") + suffix
+        f"multirouter_tenon_{dim_label(spec.tenon_width)}x"
+        f"{dim_label(spec.tenon_length)}"
+        f"_bit{dim_label(spec.bit_dia)}".replace(".", "p") + suffix
     )

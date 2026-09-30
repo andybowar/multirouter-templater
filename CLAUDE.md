@@ -366,6 +366,27 @@ is the only conversion point — keep it that way.
   `web/vendor/three/README.md`.
 - **The import map must precede every module script**, PyScript's included.
   The vendored three.js example modules import the bare specifier `three`.
+- **Never render an echo of the user's input with `:.3f`.** 1.1875" is 1-3/16",
+  an ordinary tenon length, and three decimals turns it into "1.188" — a
+  different number. The geometry was always exact (1.1875 is 19/16, exactly
+  representable, and nothing in `Spec` rounds), but the label made it look as
+  though the app had quietly changed the input, which is the kind of thing that
+  costs you trust in every other number on the page. In `file_stem` it was an
+  actual bug: 1.1875 and 1.188 produced one filename, so two different
+  templates landed on top of each other in the downloads folder — precisely the
+  collision the `_mslot` suffix exists to prevent.
+
+  `geometry.dim_label()` is the rule: up to five decimals, trailing zeros
+  trimmed, never fewer than three. Five covers every shop fraction down to a
+  32nd; round values keep their old three-decimal form so filenames do not
+  churn. Use it for **echoes** — the engraving, `file_stem`, validation
+  messages quoting an input, the "tenon" dimension in the previews.
+
+  Do **not** use it for derived geometry. Profile-at-base and friends are
+  caliper targets, three decimals is all that means anything, and `0.67167` on
+  a drawing is false precision. The page keeps both: `dimTxt` (3dp, derived)
+  and `dimExact` (mirrors `dim_label`, echoes), with an `x: true` flag marking
+  which entries in the dimension stacks are echoes.
 - **Sectioning exactly at a layer interface** picks up the wrong layer. Offset
   by a small epsilon when verifying cross-sections.
 - **build123d drags in 88 MB of material tooling.** It imports `bd_materials`

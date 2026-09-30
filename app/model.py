@@ -29,7 +29,7 @@ from build123d import (
 )
 
 from . import config as C
-from .geometry import Spec
+from .geometry import Spec, dim_label
 
 MM = C.IN_TO_MM
 
@@ -105,9 +105,13 @@ def build_part(spec: Spec, engrave: bool = True):
 
 def engraving_lines(spec: Spec) -> list[str]:
     """Just the two facts you need to pick the right template off the shelf."""
+    # dim_label, not :.3f: this is stamped into a physical part that exists to
+    # be identified on a shelf, so a 1-3/16" tenon has to read 1.1875 and not
+    # 1.188. The font size is fixed and the base plate is 3.500" long, so the
+    # extra digits have room.
     return [
-        f"ROUTER BIT {spec.bit_dia:.3f}",
-        f"TENON SIZE {spec.tenon_width:.3f} x {spec.tenon_length:.3f}",
+        f"ROUTER BIT {dim_label(spec.bit_dia)}",
+        f"TENON SIZE {dim_label(spec.tenon_width)} x {dim_label(spec.tenon_length)}",
     ]
 
 
