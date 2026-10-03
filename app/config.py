@@ -134,7 +134,7 @@ SLOT_CLEARANCE = 0.008
 #
 # Overshooting is cheap: a mortise that is long only has more end-grain gap,
 # which glues nothing anyway. It costs slack/2 of wall at the two ends.
-SLOT_LENGTH_SLACK = 0.040
+SLOT_LENGTH_SLACK = 0.010
 
 # Wall left between the slot and the guide edge. That wall works twice - the
 # bearing rides its outside cutting the tenon, the pin rides its inside cutting
